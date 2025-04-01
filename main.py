@@ -96,11 +96,12 @@ def build_messages(clan_data):
     
     return msg1, msg2, msg3
 
-@bot.command()
-async def clanhighscores(ctx):
+@bot.tree.command(name="clanhighscores", description="Show clan highscores")
+async def clanhighscores(interaction: discord.Interaction):
+    await interaction.response.defer()
     clan_data = await fetch_clan_data()
     if clan_data is None:
-        await ctx.send("Error fetching clan data.")
+        await interaction.followup.send("Error fetching clan data.")
         return
     msg1, msg2, msg3 = build_messages(clan_data)
     channel = ctx.channel
@@ -140,6 +141,7 @@ async def update_highscores_task():
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}!")
+    await bot.tree.sync()
     update_highscores_task.start()
 
 if __name__ == "__main__":
