@@ -21,7 +21,9 @@ skills_list = [
 # Offensive skills for filtering, in lowercase
 offensive_skills = ["attack", "strength", "ranged", "magic"]
 
-bot = commands.Bot(command_prefix="!")
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Global dictionary to store the message objects for updating
 highscore_messages = {
