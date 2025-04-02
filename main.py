@@ -157,15 +157,19 @@ class SkillsDropdown(discord.ui.Select):
 
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
-            if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
-                try:
+            try:
+                if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
                     time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
                     await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
-                except Exception as e:
-                    print(f"Error sending followup for cached embed: {str(e)}")
+                else:
+                    await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+            except Exception as e:
+                print(f"Error sending followup: {str(e)}")
+                # Try a simpler message as fallback
+                try:
                     await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
-            else:
-                await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+                except:
+                    pass  # Silently ignore if even the fallback fails
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0]}")
         except Exception as e:
@@ -242,15 +246,19 @@ class BossesDropdown(discord.ui.Select):
 
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
-            if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
-                try:
+            try:
+                if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
                     time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
                     await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
-                except Exception as e:
-                    print(f"Error sending followup for cached embed: {str(e)}")
+                else:
+                    await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+            except Exception as e:
+                print(f"Error sending followup: {str(e)}")
+                # Try a simpler message as fallback
+                try:
                     await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
-            else:
-                await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+                except:
+                    pass  # Silently ignore if even the fallback fails
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0]}")
         except Exception as e:
@@ -341,7 +349,7 @@ class HighscoresBot(discord.Client):
     async def is_valid_player(self, player_name):
         try:
             # Set this to True to see very detailed debug information
-            DEBUG = True
+            DEBUG = False # Reduced debug output
             current_time = time.time()
 
             # Check cache first to avoid redundant API calls
@@ -884,22 +892,22 @@ class HighscoresBot(discord.Client):
                                         'level': level,
                                         'exp': exp
                                     })
-                        else:  # It's a boss
-                            if 'data' in entry and 'kills' in entry['data']:
-                                kills = entry['data']['kills']
-                                # Only include if they have kills for this boss
-                                if kills > 0:
-                                    valid_players.append({
-                                        'name': player_name,
-                                        'kills': kills
-                                    })
+                            else:  # It's a boss
+                                if 'data' in entry and 'kills' in entry['data']:
+                                    kills = entry['data']['kills']
+                                    # Only include if they have kills for this boss
+                                    if kills > 0:
+                                        valid_players.append({
+                                            'name': player_name,
+                                            'kills': kills
+                                        })
 
-                # If we have enough players, stop processing
-                if len(valid_players) >= 20:
-                    break
+                        # If we have enough players, stop processing
+                        if len(valid_players) >= 15:  # We only display 15 anyway
+                            break
 
-                # Small delay between batches
-                await asyncio.sleep(0.1)
+                        # Small delay between batches
+                        await asyncio.sleep(0.1)
 
             # Sort the players appropriately
             if is_skill:
