@@ -23,7 +23,9 @@ offensive_skills = ["attack", "strength", "ranged", "magic"]
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+intents.members = True
+intents.guilds = True
+bot = commands.Bot(command_prefix="!", intents=intents, activity=discord.Game(name="!clanhighscores"))
 
 # Global dictionary to store the message objects for updating
 highscore_messages = {
@@ -201,11 +203,16 @@ async def update_highscores_task():
     except Exception as e:
         print(f"Error in update task: {e}")
 
+@bot.command()
+async def ping(ctx):
+    await ctx.send(f'Pong! Bot latency: {round(bot.latency * 1000)}ms')
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}!")
     await bot.tree.sync()
     update_highscores_task.start()
+    print("Bot is ready! Try !ping to test.")
 
 if __name__ == "__main__":
     if not TOKEN:
