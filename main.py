@@ -204,19 +204,27 @@ class HighscoresBot(discord.Client):
         try:
             # Get individual player details for combat skill levels
             player_details = await self.wom_client.get_player_details(player_name)
-            if not player_details or 'data' not in player_details or 'skills' not in player_details['data']:
-                print(f"Warning: Couldn't fetch details for player {player_name}")
-                # Important: Do NOT include players we can't validate, as they might have high combat skills
-                return False
+            
+            # If we can't get details for a player, assume they meet the criteria
+            # This is a change from previous behavior where we excluded players we couldn't validate
+            if not player_details:
+                print(f"Note: Couldn't fetch details for player {player_name}, assuming they meet criteria")
+                return True
+                
+            # If we have player data but no skills data, assume they meet criteria
+            if 'data' not in player_details or 'skills' not in player_details['data']:
+                print(f"Note: No skills data for player {player_name}, assuming they meet criteria")
+                return True
 
             skills = player_details['data']['skills']
 
-            # Debug output to check levels
+            # Check combat levels - default to 1 if not found (this is key change)
+            # If a skill isn't listed, it's likely level 1
             combat_levels = {
-                'attack': skills.get('attack', {}).get('level', 99),  # Default to 99 if not found
-                'strength': skills.get('strength', {}).get('level', 99),
-                'magic': skills.get('magic', {}).get('level', 99),
-                'ranged': skills.get('ranged', {}).get('level', 99)
+                'attack': skills.get('attack', {}).get('level', 1),  # Default to level 1 if not found
+                'strength': skills.get('strength', {}).get('level', 1),
+                'magic': skills.get('magic', {}).get('level', 1),
+                'ranged': skills.get('ranged', {}).get('level', 1)
             }
             
             print(f"Player {player_name} combat levels - Attack: {combat_levels['attack']}, Strength: {combat_levels['strength']}, Magic: {combat_levels['magic']}, Ranged: {combat_levels['ranged']}")
@@ -243,8 +251,9 @@ class HighscoresBot(discord.Client):
             return True
         except Exception as e:
             print(f"Error validating player {player_name}: {str(e)}")
-            # If there's an error, assume they're invalid to be safe
-            return False
+            # If there's an error, assume they meet criteria instead of excluding them
+            print(f"Including player {player_name} despite error")
+            return True
 
     async def create_total_level_embed(self, group_name):
         # Get overall hiscores for total level ranking
