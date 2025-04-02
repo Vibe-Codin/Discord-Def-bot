@@ -175,32 +175,34 @@ class BossesDropdown(discord.ui.Select):
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
 
-        # Define all boss options - up to 25 maximum allowed by Discord
+        # Define boss options - up to 25 maximum allowed by Discord
         options = [
             # Overview option
             discord.SelectOption(label="Boss Overview", value="bosses_overview", description="Overview of top boss kills"),
-            # Core bosses from the new list
+            # Core bosses from the specified list
+            discord.SelectOption(label="Amoxliatl", value="amoxliatl", description="Amoxliatl boss highscores"),
             discord.SelectOption(label="Barrows Chests", value="barrows_chests", description="Barrows Chests highscores"),
+            discord.SelectOption(label="Bryophyta", value="bryophyta", description="Bryophyta boss highscores"),
+            discord.SelectOption(label="Callisto", value="callisto", description="Callisto boss highscores"),
+            discord.SelectOption(label="Calvarion", value="calvarion", description="Calvarion boss highscores"),
+            discord.SelectOption(label="Cerberus", value="cerberus", description="Cerberus boss highscores"),
             discord.SelectOption(label="Chambers of Xeric", value="chambers_of_xeric", description="Chambers of Xeric boss highscores"),
+            discord.SelectOption(label="Chaos Elemental", value="chaos_elemental", description="Chaos Elemental highscores"),
             discord.SelectOption(label="Commander Zilyana", value="commander_zilyana", description="Commander Zilyana boss highscores"),
             discord.SelectOption(label="Corporeal Beast", value="corporeal_beast", description="Corporeal Beast highscores"),
             discord.SelectOption(label="Giant Mole", value="giant_mole", description="Giant Mole boss highscores"),
             discord.SelectOption(label="Kalphite Queen", value="kalphite_queen", description="Kalphite Queen boss highscores"),
             discord.SelectOption(label="King Black Dragon", value="king_black_dragon", description="King Black Dragon highscores"),
             discord.SelectOption(label="K'ril Tsutsaroth", value="kril_tsutsaroth", description="K'ril Tsutsaroth boss highscores"),
+            discord.SelectOption(label="Obor", value="obor", description="Obor boss highscores"),
             discord.SelectOption(label="Sarachnis", value="sarachnis", description="Sarachnis boss highscores"),
-            discord.SelectOption(label="TzTok-Jad", value="tztok_jad", description="TzTok-Jad highscores"),
-            discord.SelectOption(label="Wintertodt", value="wintertodt", description="Wintertodt boss highscores"),
-            # Some less common bosses
-            discord.SelectOption(label="Callisto", value="callisto", description="Callisto boss highscores"),
-            discord.SelectOption(label="Cerberus", value="cerberus", description="Cerberus boss highscores"),
-            discord.SelectOption(label="Chaos Elemental", value="chaos_elemental", description="Chaos Elemental highscores"),
-            discord.SelectOption(label="Tempoross", value="tempoross", description="Tempoross boss highscores"),
-            discord.SelectOption(label="Venenatis", value="venenatis", description="Venenatis boss highscores"),
-            discord.SelectOption(label="Vetion", value="vetion", description="Vetion boss highscores"),
             discord.SelectOption(label="Scorpia", value="scorpia", description="Scorpia boss highscores"),
             discord.SelectOption(label="Skotizo", value="skotizo", description="Skotizo boss highscores"),
-            # Removed Dagannoth Kings combined entry since it's not in the new list
+            discord.SelectOption(label="Tempoross", value="tempoross", description="Tempoross boss highscores"),
+            discord.SelectOption(label="TzTok-Jad", value="tztok_jad", description="TzTok-Jad highscores"),
+            discord.SelectOption(label="Venenatis", value="venenatis", description="Venenatis boss highscores"),
+            discord.SelectOption(label="Vetion", value="vetion", description="Vetion boss highscores"),
+            discord.SelectOption(label="Wintertodt", value="wintertodt", description="Wintertodt boss highscores"),
         ]
 
         super().__init__(placeholder="Select a boss category...", min_values=1, max_values=1, options=options)
@@ -529,6 +531,9 @@ class HighscoresBot(discord.Client):
             # Small delay between batches to avoid rate limiting
             await asyncio.sleep(0.1)
 
+        # Print the actual number of players we processed vs filtered
+        print(f"Processed {len(processed_players)} valid players from {max_players_to_check} total checked")
+        
         # Sort players by total level and then by total exp (both descending)
         processed_players.sort(key=lambda x: (-x['total_level'], -x['total_exp']))
 
@@ -978,7 +983,7 @@ class HighscoresBot(discord.Client):
 
             # All bosses to check
             all_bosses = [
-                'amoxliatl', 'araxxor', 'barrows_chests', 'bryophyta', 'callisto', 
+                'amoxliatl', 'barrows_chests', 'bryophyta', 'callisto', 
                 'calvarion', 'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
                 'chaos_elemental', 'chaos_fanatic', 'commander_zilyana', 'corporeal_beast', 
                 'crazy_archaeologist', 'deranged_archaeologist', 'giant_mole', 'hespori', 
@@ -1129,12 +1134,14 @@ class HighscoresBot(discord.Client):
                               'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 
                               'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 
                               'runecrafting', 'hunter', 'construction'] or view_type in [
-                              'abyssal_sire', 'alchemical_hydra', 'chambers_of_xeric', 
-                              'theatre_of_blood', 'vorkath', 'zulrah', 'nex', 'nightmare', 
-                              'the_corrupted_gauntlet', 'tombs_of_amascut', 'king_black_dragon', 
-                              'tztok_jad', 'general_graardor', 'commander_zilyana', 'kreearra', 
-                              'kril_tsutsaroth', 'giant_mole', 'kalphite_queen', 'sarachnis', 
-                              'barrows_chests', 'corporeal_beast', 'tzkal_zuk', 'vardorvis']:
+                              'amoxliatl', 'barrows_chests', 'bryophyta', 'callisto', 
+                              'calvarion', 'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
+                              'chaos_elemental', 'chaos_fanatic', 'commander_zilyana', 'corporeal_beast', 
+                              'crazy_archaeologist', 'deranged_archaeologist', 'giant_mole', 'hespori', 
+                              'kalphite_queen', 'king_black_dragon', 'kril_tsutsaroth', 'lunar_chests', 
+                              'obor', 'sarachnis', 'scorpia', 'scurrius', 'skotizo', 'spindel', 
+                              'tempoross', 'the_hueycoatl', 'the_royal_titans', 'thermonuclear_smoke_devil', 
+                              'tztok_jad', 'venenatis', 'vetion', 'wintertodt']:
                 embed = await self.create_single_category_embed(view_type)
             else:
                 embed = await self.create_total_level_embed(group_name)  # Default to total level
@@ -1389,7 +1396,7 @@ async def preload_categories(bot):
     # List of important categories to preload
     categories = [
         "defence", "hitpoints", "prayer", "slayer",
-        "chambers_of_xeric", "theatre_of_blood", "vorkath"
+        "chambers_of_xeric", "barrows_chests", "king_black_dragon"
     ]
 
     # Load them in the background
