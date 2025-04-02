@@ -175,34 +175,30 @@ class BossesDropdown(discord.ui.Select):
         
         # Define all boss options - up to 25 maximum allowed by Discord
         options = [
-            # Top-tier bosses (most important PvM content)
+            # Overview option
             discord.SelectOption(label="Boss Overview", value="bosses_overview", description="Overview of top boss kills"),
-            discord.SelectOption(label="Abyssal Sire", value="abyssal_sire", description="Abyssal Sire boss highscores"),
-            discord.SelectOption(label="Alchemical Hydra", value="alchemical_hydra", description="Alchemical Hydra boss highscores"),
+            # Core bosses from the new list
+            discord.SelectOption(label="Barrows Chests", value="barrows_chests", description="Barrows Chests highscores"),
             discord.SelectOption(label="Chambers of Xeric", value="chambers_of_xeric", description="Chambers of Xeric boss highscores"),
-            discord.SelectOption(label="Theatre of Blood", value="theatre_of_blood", description="Theatre of Blood boss highscores"),
-            discord.SelectOption(label="Tombs of Amascut", value="tombs_of_amascut", description="Tombs of Amascut highscores"),
-            discord.SelectOption(label="Vorkath", value="vorkath", description="Vorkath boss highscores"),
-            discord.SelectOption(label="Zulrah", value="zulrah", description="Zulrah boss highscores"),
-            discord.SelectOption(label="Nex", value="nex", description="Nex boss highscores"),
-            discord.SelectOption(label="Nightmare", value="nightmare", description="Nightmare boss highscores"),
-            discord.SelectOption(label="Corrupted Gauntlet", value="the_corrupted_gauntlet", description="Corrupted Gauntlet highscores"),
-            # God Wars Dungeon bosses
-            discord.SelectOption(label="General Graardor", value="general_graardor", description="General Graardor boss highscores"),
             discord.SelectOption(label="Commander Zilyana", value="commander_zilyana", description="Commander Zilyana boss highscores"),
-            discord.SelectOption(label="Kree'arra", value="kreearra", description="Kree'arra boss highscores"),
-            discord.SelectOption(label="K'ril Tsutsaroth", value="kril_tsutsaroth", description="K'ril Tsutsaroth boss highscores"),
-            # Popular mid-tier bosses
-            discord.SelectOption(label="King Black Dragon", value="king_black_dragon", description="King Black Dragon highscores"),
-            discord.SelectOption(label="TzTok-Jad", value="tztok_jad", description="TzTok-Jad highscores"),
+            discord.SelectOption(label="Corporeal Beast", value="corporeal_beast", description="Corporeal Beast highscores"),
             discord.SelectOption(label="Giant Mole", value="giant_mole", description="Giant Mole boss highscores"),
             discord.SelectOption(label="Kalphite Queen", value="kalphite_queen", description="Kalphite Queen boss highscores"),
+            discord.SelectOption(label="King Black Dragon", value="king_black_dragon", description="King Black Dragon highscores"),
+            discord.SelectOption(label="K'ril Tsutsaroth", value="kril_tsutsaroth", description="K'ril Tsutsaroth boss highscores"),
             discord.SelectOption(label="Sarachnis", value="sarachnis", description="Sarachnis boss highscores"),
-            discord.SelectOption(label="Barrows Chests", value="barrows_chests", description="Barrows Chests highscores"),
-            discord.SelectOption(label="Dagannoth Kings", value="dagannoth_kings", description="All Dagannoth Kings combined"),
-            discord.SelectOption(label="Corporeal Beast", value="corporeal_beast", description="Corporeal Beast highscores"),
-            discord.SelectOption(label="TzKal-Zuk", value="tzkal_zuk", description="TzKal-Zuk (Inferno) highscores"),
-            discord.SelectOption(label="Vardorvis", value="vardorvis", description="Vardorvis highscores"),
+            discord.SelectOption(label="TzTok-Jad", value="tztok_jad", description="TzTok-Jad highscores"),
+            discord.SelectOption(label="Wintertodt", value="wintertodt", description="Wintertodt boss highscores"),
+            # Some less common bosses
+            discord.SelectOption(label="Callisto", value="callisto", description="Callisto boss highscores"),
+            discord.SelectOption(label="Cerberus", value="cerberus", description="Cerberus boss highscores"),
+            discord.SelectOption(label="Chaos Elemental", value="chaos_elemental", description="Chaos Elemental highscores"),
+            discord.SelectOption(label="Tempoross", value="tempoross", description="Tempoross boss highscores"),
+            discord.SelectOption(label="Venenatis", value="venenatis", description="Venenatis boss highscores"),
+            discord.SelectOption(label="Vetion", value="vetion", description="Vetion boss highscores"),
+            discord.SelectOption(label="Scorpia", value="scorpia", description="Scorpia boss highscores"),
+            discord.SelectOption(label="Skotizo", value="skotizo", description="Skotizo boss highscores"),
+            # Removed Dagannoth Kings combined entry since it's not in the new list
         ]
         
         super().__init__(placeholder="Select a boss category...", min_values=1, max_values=1, options=options)
@@ -1179,21 +1175,14 @@ async def create_bosses_overview_embed(self):
         
         # All bosses to check
         all_bosses = [
-            'abyssal_sire', 'alchemical_hydra', 'amoxliatl', 'araxxor', 'artio', 
-            'barrows_chests', 'bryophyta', 'callisto', 'calvarion', 'cerberus', 
-            'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 'chaos_elemental', 
-            'chaos_fanatic', 'commander_zilyana', 'corporeal_beast', 'crazy_archaeologist', 
-            'dagannoth_prime', 'dagannoth_rex', 'dagannoth_supreme', 'deranged_archaeologist', 
-            'duke_sucellus', 'general_graardor', 'giant_mole', 'grotesque_guardians', 
-            'hespori', 'kalphite_queen', 'king_black_dragon', 'kraken', 'kreearra', 
-            'kril_tsutsaroth', 'lunar_chests', 'mimic', 'nex', 'nightmare', 
-            'phosanis_nightmare', 'obor', 'phantom_muspah', 'sarachnis', 'scorpia', 
-            'scurrius', 'skotizo', 'sol_heredit', 'spindel', 'tempoross', 
-            'the_gauntlet', 'the_corrupted_gauntlet', 'the_hueycoatl', 'the_leviathan', 
-            'the_royal_titans', 'the_whisperer', 'theatre_of_blood', 'theatre_of_blood_hard_mode', 
-            'thermonuclear_smoke_devil', 'tombs_of_amascut', 'tombs_of_amascut_expert', 
-            'tzkal_zuk', 'tztok_jad', 'vardorvis', 'venenatis', 'vetion', 
-            'vorkath', 'wintertodt', 'zalcano', 'zulrah'
+            'amoxliatl', 'araxxor', 'barrows_chests', 'bryophyta', 'callisto', 
+            'calvarion', 'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
+            'chaos_elemental', 'chaos_fanatic', 'commander_zilyana', 'corporeal_beast', 
+            'crazy_archaeologist', 'deranged_archaeologist', 'giant_mole', 'hespori', 
+            'kalphite_queen', 'king_black_dragon', 'kril_tsutsaroth', 'lunar_chests', 
+            'obor', 'sarachnis', 'scorpia', 'scurrius', 'skotizo', 'spindel', 
+            'tempoross', 'the_hueycoatl', 'the_royal_titans', 'thermonuclear_smoke_devil', 
+            'tztok_jad', 'venenatis', 'vetion', 'wintertodt'
         ]
         
         # Store all player KCs across all bosses
