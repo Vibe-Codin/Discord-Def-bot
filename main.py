@@ -206,41 +206,45 @@ class HighscoresBot(discord.Client):
             player_details = await self.wom_client.get_player_details(player_name)
             if not player_details or 'data' not in player_details or 'skills' not in player_details['data']:
                 print(f"Warning: Couldn't fetch details for player {player_name}")
-                # Instead of skipping, let's include players we can't validate to ensure we have results
-                return True
+                # Important: Do NOT include players we can't validate, as they might have high combat skills
+                return False
 
             skills = player_details['data']['skills']
 
             # Debug output to check levels
-            if 'attack' in skills and 'strength' in skills and 'magic' in skills and 'ranged' in skills:
-                print(f"Player {player_name} combat levels - Attack: {skills['attack'].get('level', 0)}, Strength: {skills['strength'].get('level', 0)}, Magic: {skills['magic'].get('level', 0)}, Ranged: {skills['ranged'].get('level', 0)}")
+            combat_levels = {
+                'attack': skills.get('attack', {}).get('level', 99),  # Default to 99 if not found
+                'strength': skills.get('strength', {}).get('level', 99),
+                'magic': skills.get('magic', {}).get('level', 99),
+                'ranged': skills.get('ranged', {}).get('level', 99)
+            }
+            
+            print(f"Player {player_name} combat levels - Attack: {combat_levels['attack']}, Strength: {combat_levels['strength']}, Magic: {combat_levels['magic']}, Ranged: {combat_levels['ranged']}")
 
-            # Check attack level (must be 2 or less)
-            if 'attack' in skills and skills['attack'].get('level', 0) > 2:
-                print(f"Player {player_name} excluded: Attack level {skills['attack'].get('level', 0)} > 2")
+            # Check all combat skills must be 2 or less (except Defence, Hitpoints, Prayer)
+            if combat_levels['attack'] > 2:
+                print(f"Player {player_name} excluded: Attack level {combat_levels['attack']} > 2")
                 return False
-
-            # Check strength level (must be 2 or less)
-            if 'strength' in skills and skills['strength'].get('level', 0) > 2:
-                print(f"Player {player_name} excluded: Strength level {skills['strength'].get('level', 0)} > 2")
+                
+            if combat_levels['strength'] > 2:
+                print(f"Player {player_name} excluded: Strength level {combat_levels['strength']} > 2")
                 return False
-
-            # Check magic level (must be 2 or less)
-            if 'magic' in skills and skills['magic'].get('level', 0) > 2:
-                print(f"Player {player_name} excluded: Magic level {skills['magic'].get('level', 0)} > 2")
+                
+            if combat_levels['magic'] > 2:
+                print(f"Player {player_name} excluded: Magic level {combat_levels['magic']} > 2")
                 return False
-
-            # Check ranged level (must be 2 or less)
-            if 'ranged' in skills and skills['ranged'].get('level', 0) > 2:
-                print(f"Player {player_name} excluded: Ranged level {skills['ranged'].get('level', 0)} > 2")
+                
+            if combat_levels['ranged'] > 2:
+                print(f"Player {player_name} excluded: Ranged level {combat_levels['ranged']} > 2")
                 return False
-
+            
             # Note: Defence, Hitpoints, and Prayer can be any level
             print(f"Player {player_name} validated - meets requirements (≤ 2 in Attack/Strength/Magic/Ranged)")
-            return True  # If all combat skills are 2 or less
+            return True
         except Exception as e:
             print(f"Error validating player {player_name}: {str(e)}")
-            return False  # If there's an error, assume they're invalid to be safe
+            # If there's an error, assume they're invalid to be safe
+            return False
 
     async def create_total_level_embed(self, group_name):
         # Get overall hiscores for total level ranking
@@ -255,14 +259,24 @@ class HighscoresBot(discord.Client):
             color=0x3498db,
             timestamp=datetime.now()
         )
-
+        
+        # Cache valid players to avoid repeated API calls
+        valid_players_cache = {}
+        
         # Process all players to get total levels and experience
         processed_players = []
         for entry in overall_hiscores:
             player_name = entry['player']['displayName']
-
-            # Check if player meets combat level criteria
-            if not await self.is_valid_player(player_name):
+            
+            # Check player cache first
+            if player_name in valid_players_cache:
+                is_valid = valid_players_cache[player_name]
+            else:
+                # Check if player meets combat level criteria
+                is_valid = await self.is_valid_player(player_name)
+                valid_players_cache[player_name] = is_valid  # Cache the result
+            
+            if not is_valid:
                 print(f"Skipping {player_name} for total level highscore - over combat skill limit")
                 continue  # Skip this player if they have more than 2 in any combat skill
 
@@ -290,10 +304,13 @@ class HighscoresBot(discord.Client):
         # Sort players by total level and then by total exp (both descending)
         processed_players.sort(key=lambda x: (-x['total_level'], -x['total_exp']))
 
-        # Add the top 20 by Total Level
+        # Add the top 20 by Total Level (or fewer if not enough valid players)
         top_text = ""
-        for i, player in enumerate(processed_players[:20], 1):
-            top_text += f"{i}. {player['name']} | Total: {player['total_level']} | XP: {player['total_exp']:,}\n"
+        if processed_players:
+            for i, player in enumerate(processed_players[:20], 1):
+                top_text += f"{i}. {player['name']} | Total: {player['total_level']} | XP: {player['total_exp']:,}\n"
+        else:
+            top_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
 
         embed.add_field(name="Top 20 Players by Total Level", value=top_text, inline=False)
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
