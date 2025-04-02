@@ -47,7 +47,7 @@ async def fetch_clan_data():
         group_members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
         group_hiscores_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores"
         group_details_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence"
-        
+
         print(f"Fetching group details from: {group_endpoint}")
         print(f"Members endpoint: {group_members_endpoint}")
         print(f"Hiscores endpoint: {group_hiscores_endpoint}")
@@ -57,12 +57,12 @@ async def fetch_clan_data():
             # First fetch group details to verify we have a valid group
             response = requests.get(group_endpoint, headers=headers, timeout=15)
             print(f"Group details response status: {response.status_code}")
-            
+
             if response.status_code == 200 and response.text.strip():
                 try:
                     group_data = response.json()
                     print(f"Group data: {json.dumps(group_data, indent=2)[:200]}...")
-                    
+
                     # Extract members from group data if available
                     if 'memberships' in group_data and group_data['memberships']:
                         # Convert memberships to player list
@@ -70,11 +70,11 @@ async def fetch_clan_data():
                         for membership in group_data['memberships']:
                             if 'player' in membership and isinstance(membership['player'], dict):
                                 player_data.append(membership['player'])
-                        
+
                         if player_data:
                             print(f"Extracted {len(player_data)} players from group data")
                             return player_data
-                    
+
                     # Get detailed player data from hiscores endpoint
                     hiscores_response = requests.get(group_hiscores_endpoint, headers=headers, timeout=15)
                     if hiscores_response.status_code == 200 and hiscores_response.text.strip():
@@ -84,7 +84,7 @@ async def fetch_clan_data():
                             return hiscores_data
                         except json.JSONDecodeError as e:
                             print(f"Error decoding hiscores JSON: {e}")
-                    
+
                     # Try the members endpoint as fallback
                     members_response = requests.get(group_members_endpoint, headers=headers, timeout=15)
                     if members_response.status_code == 200 and members_response.text.strip():
@@ -95,7 +95,7 @@ async def fetch_clan_data():
                             for membership in members_data:
                                 if 'player' in membership and isinstance(membership['player'], dict):
                                     player_data.append(membership['player'])
-                            
+
                             print(f"Found {len(player_data)} player records from memberships")
                             return player_data
                         except json.JSONDecodeError as e:
@@ -103,14 +103,14 @@ async def fetch_clan_data():
                     else:
                         print(f"Failed to get members: {members_response.status_code}")
                         print(f"Response text: {members_response.text[:100] if members_response.text else 'Empty'}")
-                    
+
                     # Try to extract member usernames directly from the group data
                     member_usernames = []
                     if 'memberCount' in group_data and group_data['memberCount'] > 0:
                         # If we have a clan chat name, add it as the first "member"
                         if 'clanChat' in group_data and group_data['clanChat']:
                             member_usernames.append(group_data['clanChat'].lower())
-                            
+
                         # Try to find members mentioned in description
                         if 'description' in group_data and group_data['description']:
                             # Split by common separators and add as potential members
@@ -119,21 +119,21 @@ async def fetch_clan_data():
                                 word = word.strip().lower()
                                 if word and len(word) >= 3 and ' ' not in word and word not in member_usernames:
                                     member_usernames.append(word)
-                    
+
                     if member_usernames:
                         print(f"Extracted {len(member_usernames)} usernames from group data")
                         return member_usernames
-                        
+
                     # If we got this far but couldn't get detailed player data, return the group data
                     # The build_messages function will handle extracting members from it
                     return group_data
-                    
+
                 except json.JSONDecodeError as e:
                     print(f"Error decoding group JSON: {e}")
             else:
                 print(f"Failed to get group details: {response.status_code}")
                 print(f"Response text: {response.text[:100] if response.text else 'Empty'}")
-                
+
                 # Try fetching by name as a fallback
                 name_response = requests.get(group_details_endpoint, headers=headers, timeout=15)
                 if name_response.status_code == 200 and name_response.text.strip():
@@ -236,19 +236,6 @@ def build_messages(clan_data):
                 players.append(membership['player'])
         clan_data = players
         print(f"Extracted {len(players)} players from group data")
-        
-        # Debug: Check if players have skill data
-        if players and len(players) > 0:
-            sample_players = players[:3]  # Take first 3 players
-            for i, player in enumerate(sample_players):
-                print(f"Debug - Player {i+1} username: {player.get('username', 'Unknown')}")
-                if 'latestSnapshot' in player and player['latestSnapshot']:
-                    snapshot = player['latestSnapshot']
-                    if 'data' in snapshot and 'skills' in snapshot['data']:
-                        skills = snapshot['data']['skills']
-                        print(f"  Skills available: {list(skills.keys())[:5]}...")
-                    else:
-                        print("  No skills data found in player snapshot")
     # If we received a list but not of player objects, it might be just usernames
     elif isinstance(clan_data, list) and len(clan_data) > 0 and not isinstance(clan_data[0], dict):
         # Convert simple username list to dummy player objects
@@ -278,54 +265,27 @@ def build_messages(clan_data):
 
     # Filter out users with offensive combat stats > 2
     filtered = []
-    # Print sample player data to debug
-    if len(clan_data) > 0:
-        sample_player = clan_data[0]
-        print(f"Sample player data structure: {json.dumps(sample_player, indent=2)[:500]}")
-        if 'latestSnapshot' in sample_player:
-            print(f"Snapshot data sample: {json.dumps(sample_player['latestSnapshot'], indent=2)[:500]}")
-            
-            # Get detailed skill data structure for debugging
-            if ('latestSnapshot' in sample_player and 
-                'data' in sample_player['latestSnapshot'] and 
-                'skills' in sample_player['latestSnapshot']['data']):
-                skills_data = sample_player['latestSnapshot']['data']['skills']
-                print(f"Skills data structure: {json.dumps(list(skills_data.keys())[:5], indent=2)}")
-                
-                # Print a sample skill's detailed structure
-                if skills_data and len(skills_data) > 0:
-                    first_skill = next(iter(skills_data))
-                    print(f"Sample skill '{first_skill}' structure: {json.dumps(skills_data[first_skill], indent=2)}")
-    
     for player in clan_data:
         if not isinstance(player, dict):
             print(f"Invalid player data format: {player}")
             continue
-            
+
         # Try to access player's latest snapshot data
         # In the API, player stats are in the 'latestSnapshot' field
         skills_data = {}
         if 'latestSnapshot' in player and player['latestSnapshot']:
             latest_snapshot = player['latestSnapshot']
-            # Print the first player's snapshot structure for debugging
-            if player.get('username') == 'the def cc':
-                print(f"Debug: First player snapshot structure: {json.dumps(latest_snapshot, indent=2)[:300]}...")
-            
-            # Check if the snapshot has data
             if isinstance(latest_snapshot, dict):
-                # Sometimes the skills are directly in data, sometimes in data.skills
                 if 'data' in latest_snapshot:
                     snapshot_data = latest_snapshot['data']
                     if isinstance(snapshot_data, dict):
                         if 'skills' in snapshot_data:
                             skills_data = snapshot_data['skills']
-                        # Some API responses might have skills directly in data
                         elif any(skill in snapshot_data for skill in skills_list):
                             skills_data = snapshot_data
-                # Handle case where skills might be directly in latestSnapshot
                 elif 'skills' in latest_snapshot:
                     skills_data = latest_snapshot['skills']
-        
+
         valid = True
         for skill in offensive_skills:
             # Check if the skill data exists and get the level
@@ -334,7 +294,7 @@ def build_messages(clan_data):
                 if level > 2:
                     valid = False
                     break
-        
+
         if valid:
             filtered.append(player)
 
@@ -347,29 +307,29 @@ def build_messages(clan_data):
     def get_total_level_and_exp(player):
         # First try to get it from the player's exp field for experience
         total_exp = player.get('exp', 0)
-        
+
         # For maxed players in OSRS, total level should be 2277 (99 in all 23 skills)
         max_total_level = 2277
-        
+
         # Set a default level of 0 that we'll try to improve
         total_level = 0
-        
+
         # Check if the player has latestSnapshot data
         if 'latestSnapshot' in player and player['latestSnapshot']:
             snapshot = player['latestSnapshot']
-            
+
             # Check if this is a direct WOM API response format
             if isinstance(snapshot, dict):
                 # Try to get exp from player top-level fields first (these are often more reliable)
                 if total_exp == 0 and 'exp' in player:
                     total_exp = player['exp']
-                    
+
                 # Try path: latestSnapshot.data.skills.overall
                 if 'data' in snapshot and isinstance(snapshot['data'], dict):
                     data = snapshot['data']
                     if 'skills' in data and isinstance(data['skills'], dict):
                         skills_data = data['skills']
-                        
+
                         # Check for overall level directly
                         if 'overall' in skills_data and isinstance(skills_data['overall'], dict):
                             overall = skills_data['overall']
@@ -377,7 +337,7 @@ def build_messages(clan_data):
                                 total_level = overall['level']
                             if total_exp == 0 and 'experience' in overall:
                                 total_exp = overall['experience']
-                        
+
                         # If overall doesn't have level, try to sum individual skill levels
                         if total_level == 0:
                             skill_levels = []
@@ -386,14 +346,14 @@ def build_messages(clan_data):
                                     skill_levels.append(skill_data['level'])
                             if skill_levels:
                                 total_level = sum(skill_levels)
-                    
+
                     # Try direct overall in data
                     elif 'overall' in data and isinstance(data['overall'], dict):
                         if total_level == 0 and 'level' in data['overall']:
                             total_level = data['overall']['level']
                         if total_exp == 0 and 'experience' in data['overall']:
                             total_exp = data['overall']['experience']
-        
+
         # For high-level accounts with lots of XP, assume they are maxed if we couldn't get a level
         if total_level == 0 and total_exp > 200_000_000:  # Very high XP, likely maxed
             total_level = max_total_level
@@ -403,9 +363,9 @@ def build_messages(clan_data):
             # Estimate level based on experience (rough approximation)
             estimated_level = int(total_exp / 7000)
             total_level = min(estimated_level, max_total_level)  # Cap at max level
-                
+
         return (total_level, total_exp)
-    
+
     # First message: Top 10 players by Total Level
     sorted_total = sorted(
         filtered, 
@@ -414,14 +374,14 @@ def build_messages(clan_data):
     )
     top_total = sorted_total[:10]
     msg1 = "**Top 10 by Total Level:**\n"
-    
+
     for player in top_total:
         username = player.get('username', 'Unknown')
         display_name = player.get('displayName', username)
         level, exp = get_total_level_and_exp(player)
-        
+
         msg1 += f"- {display_name} | Level: {level} | XP: {exp:,}\n"
-        
+
     if len(top_total) == 0:
         msg1 += "*No player data available*\n"
 
@@ -429,169 +389,77 @@ def build_messages(clan_data):
     msg2 = "**Top 10 per Skill:**\n"
     for skill in skills_list:
         msg2 += f"\n**{skill.title()}:**\n"
-        
+
         # Define a function to safely extract skill experience and level for sorting
         def get_skill_data(player, skill_name):
             # Initialize with defaults
             exp = 0
             level = 0
-            
+
             # First try top-level player fields (some API responses have this)
             if skill_name == 'overall':
                 exp = player.get('exp', 0)
                 level = player.get('level', 0)
                 if exp > 0 or level > 0:
                     return (exp, level)
-            
-            # Normalize skill name (Wise Old Man API uses some variations)
-            normalized_skill = skill_name.lower().replace(' ', '_')
-            
-            # Check if player has latestSnapshot data
+
+            # Try to extract from different snapshot structures
             if 'latestSnapshot' not in player or not player['latestSnapshot']:
                 return (exp, level)
-                
+
             snapshot = player['latestSnapshot']
-            if not isinstance(snapshot, dict):
-                return (exp, level)
-                
-            # Try different data paths based on Wise Old Man API structure
-            
-            # Path 1: latestSnapshot.data.skills.{skill}
-            if 'data' in snapshot and isinstance(snapshot['data'], dict):
-                data = snapshot['data']
-                
-                # This is the most common path in WOM API v2
-                if 'skills' in data and isinstance(data['skills'], dict):
-                    skills = data['skills']
-                    
-                    # Try exact skill name first
+            # Try different paths to find skill data
+            if isinstance(snapshot, dict):
+                # Path 1: latestSnapshot.data.skills.{skill}
+                if 'data' in snapshot and isinstance(snapshot['data'], dict):
+                    data = snapshot['data']
+                    if 'skills' in data and isinstance(data['skills'], dict):
+                        skills = data['skills']
+                        if skill_name in skills and isinstance(skills[skill_name], dict):
+                            skill_data = skills[skill_name]
+                            exp = skill_data.get('experience', 0)
+                            level = skill_data.get('level', 0)
+                    # Path 2: latestSnapshot.data.{skill}
+                    elif skill_name in data and isinstance(data[skill_name], dict):
+                        skill_data = data[skill_name]
+                        exp = skill_data.get('experience', 0)
+                        level = skill_data.get('level', 0)
+                # Path 3: latestSnapshot.skills.{skill}
+                elif 'skills' in snapshot and isinstance(snapshot['skills'], dict):
+                    skills = snapshot['skills']
                     if skill_name in skills and isinstance(skills[skill_name], dict):
                         skill_data = skills[skill_name]
                         exp = skill_data.get('experience', 0)
                         level = skill_data.get('level', 0)
-                    # Try normalized skill name
-                    elif normalized_skill in skills and isinstance(skills[normalized_skill], dict):
-                        skill_data = skills[normalized_skill]
-                        exp = skill_data.get('experience', 0)
-                        level = skill_data.get('level', 0)
-                    # Try both camelCase and snake_case variations
-                    else:
-                        # Check various formats that might be in the API
-                        potential_keys = [
-                            skill_name,
-                            normalized_skill,
-                            skill_name.replace('_', ''),
-                            skill_name.title().replace(' ', '')
-                        ]
-                        for key in potential_keys:
-                            if key in skills and isinstance(skills[key], dict):
-                                skill_data = skills[key]
-                                exp = skill_data.get('experience', 0) 
-                                level = skill_data.get('level', 0)
-                                if exp > 0 or level > 0:
-                                    break
-                
-                # Path 2: latestSnapshot.data.{skill} (direct skill in data)
-                if (exp == 0 and level == 0):
-                    # Check various possible formats of the skill name
-                    potential_keys = [
-                        skill_name,
-                        normalized_skill,
-                        skill_name.replace('_', ''),
-                        skill_name.title().replace(' ', '')
-                    ]
-                    for key in potential_keys:
-                        if key in data and isinstance(data[key], dict):
-                            skill_data = data[key]
-                            exp = skill_data.get('experience', 0)
-                            level = skill_data.get('level', 0)
-                            if exp > 0 or level > 0:
-                                break
-            
-            # Path 3: latestSnapshot.skills.{skill} (direct in snapshot)
-            if (exp == 0 and level == 0) and 'skills' in snapshot and isinstance(snapshot['skills'], dict):
-                skills = snapshot['skills']
-                potential_keys = [
-                    skill_name,
-                    normalized_skill,
-                    skill_name.replace('_', ''),
-                    skill_name.title().replace(' ', '')
-                ]
-                for key in potential_keys:
-                    if key in skills and isinstance(skills[key], dict):
-                        skill_data = skills[key]
-                        exp = skill_data.get('experience', 0)
-                        level = skill_data.get('level', 0)
-                        if exp > 0 or level > 0:
-                            break
-            
-            # If we have experience but no level, estimate level from exp
-            if exp > 0 and level == 0:
-                # Very basic level estimation for OSRS skills
-                if exp >= 13034431:  # Level 99 experience
-                    level = 99
-                elif exp > 1000000:  # High level
-                    level = 85 + int((exp - 1000000) / 1000000)
-                else:  # Lower levels
-                    level = min(99, max(1, int(exp/10000)))
-            
+
             return (exp, level)
-            
+
         # Sort players by skill experience using the helper function
         sorted_skill = sorted(
             filtered,
             key=lambda x: get_skill_data(x, skill)[0],  # Sort by experience
             reverse=True
         )
-        
+
         top_skill = sorted_skill[:10]
         player_added = False
-        
-        # Add detailed skill data from top players
+
         for player in top_skill:
             username = player.get('username', 'Unknown')
             display_name = player.get('displayName', username)
             exp, level = get_skill_data(player, skill)
-            
+
             # Add player to the message if they have any data for this skill
             if exp > 0 or level > 0:
                 msg2 += f"- {display_name} | Level: {level} | XP: {exp:,}\n"
                 player_added = True
-        
-        # Debug output for all skills to better understand data issues
+
         if not player_added:
-            if len(filtered) > 0:
-                print(f"Debug: No players found for {skill}.")
-                
-                # Try directly extracting first player's skill data to diagnose issues
-                sample_player = filtered[0]
-                if 'latestSnapshot' in sample_player and sample_player['latestSnapshot']:
-                    snapshot = sample_player['latestSnapshot']
-                    if isinstance(snapshot, dict) and 'data' in snapshot:
-                        data = snapshot['data']
-                        if 'skills' in data and isinstance(data['skills'], dict):
-                            skills_data = data['skills']
-                            print(f"Available skills: {list(skills_data.keys())}")
-                            
-                            # Try different formats of the skill name
-                            normalized_skill = skill.lower().replace(' ', '_')
-                            potential_keys = [
-                                skill,
-                                normalized_skill,
-                                skill.replace('_', ''),
-                                skill.title().replace(' ', '')
-                            ]
-                            
-                            found_keys = []
-                            for key in skills_data.keys():
-                                if any(pk.lower() in key.lower() for pk in potential_keys):
-                                    found_keys.append(key)
-                            
-                            if found_keys:
-                                print(f"Potential matching keys for '{skill}': {found_keys}")
-        
-        if not player_added:
-            msg2 += "*No data available*\n"
+            # Only for the first skill, add more detailed message about data being missing
+            if skill == skills_list[0]:
+                msg2 += "*No data available - The Wise Old Man API might not have this skill data*\n"
+            else:
+                msg2 += "*No data available*\n"
 
     # Third message: Top 10 per Boss KC
     # Get the list of all bosses from all players
@@ -603,7 +471,7 @@ def build_messages(clan_data):
                     boss_data = player['latestSnapshot']['data']['bosses']
                     for boss in boss_data.keys():
                         boss_set.add(boss)
-    
+
     bosses_list = sorted(boss_set)
 
     msg3 = "**Top 10 per Boss KC:**\n"
@@ -612,7 +480,7 @@ def build_messages(clan_data):
     else:
         for boss in bosses_list:
             msg3 += f"\n**{boss.title()}:**\n"
-            
+
             # Sort players by boss KC
             sorted_boss = sorted(
                 filtered,
@@ -622,23 +490,23 @@ def build_messages(clan_data):
                 ),
                 reverse=True
             )
-            
+
             top_boss = sorted_boss[:10]
             player_added = False
-            
+
             for player in top_boss:
                 username = player.get('username', 'Unknown')
                 kc = 0
-                
+
                 if 'latestSnapshot' in player and isinstance(player['latestSnapshot'], dict):
                     if 'data' in player['latestSnapshot'] and isinstance(player['latestSnapshot']['data'], dict):
                         if 'bosses' in player['latestSnapshot']['data'] and isinstance(player['latestSnapshot']['data']['bosses'], dict):
                             kc = player['latestSnapshot']['data']['bosses'].get(boss, 0)
-                
+
                 if kc > 0:
                     msg3 += f"- {username} | KC: {kc}\n"
                     player_added = True
-            
+
             if not player_added:
                 msg3 += "*No data available*\n"
 
@@ -722,14 +590,14 @@ async def testapi(interaction: discord.Interaction):
             # Group endpoints from docs
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",
             f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence",
-            
+
             # Group stats endpoints
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/gained",
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/records",
-            
+
             # Competition endpoints
             f"{WISE_OLD_MAN_BASE_URL}/competitions?groupId={CLAN_ID}",
-            
+
             # Player search - might help identify group members
             f"{WISE_OLD_MAN_BASE_URL}/players/search/names?username=Defence"
         ]
@@ -805,7 +673,7 @@ async def testgroup(interaction: discord.Interaction):
 
         # Use requests for maximum compatibility
         import requests
-        
+
         # 1. Get group details
         try:
             response = requests.get(group_url, headers=headers, timeout=15)
@@ -825,18 +693,18 @@ async def testgroup(interaction: discord.Interaction):
                         members_data = members_response.json()
                         member_count = len(members_data)
                         results.append(f"Found {member_count} members")
-                        
+
                         if member_count > 0:
                             # Show first member as example (limit to 500 chars)
                             member_json = json.dumps(members_data[0], indent=2)[:500] + "..."
                             results.append(f"First member: {member_json}\n")
-                            
+
                             # 3. Get group hiscores
                             hiscores_response = requests.get(hiscores_url, headers=headers, timeout=15)
-                            if hiscores_response.status_code == 200:
-                                hiscores_data = hiscores_response.json()
+                            if hiscores_response.status_code == 20:
+                            hiscores_data = hiscores_response.json()
                                 results.append(f"Found {len(hiscores_data)} hiscores entries")
-                                
+
                                 if len(hiscores_data) > 0:
                                     # Show first hiscore entry (limit to 500 chars)
                                     hiscore_json = json.dumps(hiscores_data[0], indent=2)[:500] + "..."
@@ -865,34 +733,34 @@ async def testgroup(interaction: discord.Interaction):
 @bot.tree.command(name="testmembers", description="Test fetching clan members")
 async def testmembers(interaction: discord.Interaction):
     await interaction.response.defer()
-    
+
     # Use headers according to API documentation
     headers = {
         'Accept': 'application/json',
         'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
     }
-    
+
     # Direct call to members endpoint
     import requests
     members_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
-    
+
     try:
         response = requests.get(members_url, headers=headers, timeout=15)
         if response.status_code == 200 and response.text.strip():
             try:
                 members_data = response.json()
                 member_count = len(members_data)
-                
+
                 # Get the structure of the first member to understand it
                 if member_count > 0:
                     first_member = members_data[0]
                     keys = list(first_member.keys())
-                    
+
                     # Get player data structure if available
                     player_keys = []
                     if 'player' in first_member and isinstance(first_member['player'], dict):
                         player_keys = list(first_member['player'].keys())
-                    
+
                     # Check for snapshot data if it exists
                     snapshot_info = "No snapshot data found"
                     if ('player' in first_member and 
@@ -900,21 +768,21 @@ async def testmembers(interaction: discord.Interaction):
                         first_member['player']['latestSnapshot']):
                         snapshot = first_member['player']['latestSnapshot']
                         snapshot_info = f"Snapshot found with keys: {list(snapshot.keys())}"
-                        
+
                         # Check for skills data
                         if 'data' in snapshot and 'skills' in snapshot['data']:
                             skill_keys = list(snapshot['data']['skills'].keys())
                             snapshot_info += f"\nSkills available: {skill_keys[:10]}..."
-                    
+
                     # Format the first member as a string with limited length
                     sample_json = json.dumps(first_member, indent=2)[:900]
-                    
+
                     message = f"Found {member_count} members.\n\n"
                     message += f"Member structure keys: {keys}\n\n"
                     message += f"Player structure keys: {player_keys}\n\n"
                     message += f"Snapshot info: {snapshot_info}\n\n"
                     message += f"Sample member data:\n{sample_json}"
-                    
+
                     # Send the detailed info
                     await interaction.followup.send(message)
                 else:
