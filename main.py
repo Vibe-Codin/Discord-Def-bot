@@ -1452,6 +1452,56 @@ async def on_ready():
             # Only register the 'new' and 'refreshcache' commands
             print("Registering only /new and /refreshcache commands...")
             
+            # Add commands explicitly before syncing
+            @client.tree.command(name="new", description="Push a new highscores embed without refreshing cache")
+            @app_commands.checks.cooldown(1, 30.0, key=lambda i: i.guild_id)
+            async def new_command(interaction: discord.Interaction):
+                await interaction.response.defer(thinking=True)
+                try:
+                    channel = interaction.channel
+                    if channel:
+                        # Create a new view with cached embeds
+                        view = HighscoresView(client, client.cached_embeds)
+                        # Get embed from cache or create a new one
+                        if "total" in client.cached_embeds:
+                            embed = client.cached_embeds["total"]
+                            embed.timestamp = datetime.now()
+                        else:
+                            embed = await client.update_highscores(force_refresh=False)
+                        # Send to channel
+                        message = await channel.send(embed=embed, view=view)
+                        client.last_message = message
+                        await interaction.followup.send("New highscores embed created successfully!", ephemeral=True)
+                    else:
+                        await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+                except Exception as e:
+                    await interaction.followup.send(f"Error creating new embed: {str(e)}", ephemeral=True)
+                    print(f"Error in new_embed command: {str(e)}")
+
+            @client.tree.command(name="refreshcache", description="Refresh highscores cache and push a new embed")
+            @app_commands.checks.cooldown(1, 60.0, key=lambda i: i.guild_id)
+            async def refresh_cache_command(interaction: discord.Interaction):
+                await interaction.response.defer(thinking=True)
+                try:
+                    channel = interaction.channel
+                    if channel:
+                        # Force refresh the cache
+                        embed = await client.update_highscores(force_refresh=True)
+                        # Set timestamp
+                        if isinstance(embed, discord.Embed):
+                            embed.timestamp = datetime.now()
+                        # Create view
+                        view = HighscoresView(client, client.cached_embeds)
+                        # Send to channel
+                        message = await channel.send(embed=embed, view=view)
+                        client.last_message = message
+                        await interaction.followup.send("Highscores cache refreshed and new embed created successfully!", ephemeral=True)
+                    else:
+                        await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+                except Exception as e:
+                    await interaction.followup.send(f"Error refreshing cache: {str(e)}", ephemeral=True)
+                    print(f"Error in refresh_cache command: {str(e)}")
+            
             # Sync the commands globally (may take up to an hour to propagate)
             print("Syncing command tree...")
             await client.tree.sync()
@@ -1497,69 +1547,6 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
                 await interaction.response.send_message(f"An error occurred: {error}", ephemeral=True)
         except Exception as e:
             print(f"Error sending error message: {e}")
-
-# Set up only the /new and /refreshcache slash commands
-@client.tree.command(name="new", description="Push a new highscores embed without refreshing cache")
-@app_commands.checks.cooldown(1, 30.0, key=lambda i: i.guild_id)
-async def new_command(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True, ephemeral=True)
-
-    try:
-        await interaction.followup.send("Creating a new highscores embed without refreshing cache...", ephemeral=True)
-
-        # Don't refresh cache, use existing data
-        channel = interaction.channel
-        if channel:
-            # Create a new view with cached embeds
-            view = HighscoresView(client, client.cached_embeds)
-
-            # Get embed from cache or create a new one
-            if "total" in client.cached_embeds:
-                embed = client.cached_embeds["total"]
-                embed.timestamp = datetime.now()
-            else:
-                embed = await client.update_highscores(force_refresh=False)
-
-            # Send to channel
-            message = await channel.send(embed=embed, view=view)
-            client.last_message = message
-            await interaction.followup.send("New highscores embed created successfully!", ephemeral=True)
-        else:
-            await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"Error creating new embed: {str(e)}", ephemeral=True)
-        print(f"Error in new_embed command: {str(e)}")
-
-@client.tree.command(name="refreshcache", description="Refresh highscores cache and push a new embed")
-@app_commands.checks.cooldown(1, 60.0, key=lambda i: i.guild_id)
-async def refresh_cache_command(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True, ephemeral=True)
-
-    try:
-        await interaction.followup.send("Refreshing highscores cache and creating a new embed...", ephemeral=True)
-
-        # Refresh cache and create new embed
-        channel = interaction.channel
-        if channel:
-            # Force refresh the cache
-            embed = await client.update_highscores(force_refresh=True)
-
-            # Set timestamp
-            if isinstance(embed, discord.Embed):
-                embed.timestamp = datetime.now()
-
-            # Create view
-            view = HighscoresView(client, client.cached_embeds)
-
-            # Send to channel
-            message = await channel.send(embed=embed, view=view)
-            client.last_message = message
-            await interaction.followup.send("Highscores cache refreshed and new embed created successfully!", ephemeral=True)
-        else:
-            await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"Error refreshing cache: {str(e)}", ephemeral=True)
-        print(f"Error in refresh_cache command: {str(e)}")
 
 # Command registration is complete
 print("All commands registered to the tree")
