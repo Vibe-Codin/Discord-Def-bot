@@ -5,7 +5,8 @@ import requests
 from datetime import datetime
 
 # Discord bot token
-TOKEN = ''  # Set this in your Replit secrets
+import os
+TOKEN = os.environ.get('DISCORD_BOT_TOKEN', '')  # Get token from Replit secrets
 
 # WiseOldMan API client
 class WOMClient:
@@ -32,7 +33,7 @@ class HighscoresBot(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.wom_client = WOMClient()
-        self.GROUP_ID = 1  # Change to your clan's group ID from Wise Old Man website
+        self.GROUP_ID = 4357  # Group ID for OSRS Defence clan (update this if different)
         self.last_message = None
 
     async def on_ready(self):
