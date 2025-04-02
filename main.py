@@ -482,20 +482,34 @@ class HighscoresBot(discord.Client):
         # Add the top 15 by Total Level
         top_level_text = ""
         if processed_players:
-            # Sort by total level first, then by total exp
+            # Make sure we have exactly 15 entries for total level
             level_sorted = sorted(processed_players, key=lambda x: (-x['total_level'], -x['total_exp']))
-            for i, player in enumerate(level_sorted[:15], 1):
+            players_to_show = min(15, len(level_sorted))  # In case we have fewer than 15 valid players
+            
+            for i, player in enumerate(level_sorted[:players_to_show], 1):
                 top_level_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
+            
+            # Add placeholder entries if we have fewer than 15 players
+            if players_to_show < 15:
+                for i in range(players_to_show + 1, 16):
+                    top_level_text += f"{i}. No player qualifying\n"
         else:
             top_level_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
 
         # Add the top 15 by Total Experience
         top_exp_text = ""
         if processed_players:
-            # Sort purely by total exp
+            # Make sure we have exactly 15 entries for total experience
             exp_sorted = sorted(processed_players, key=lambda x: -x['total_exp'])
-            for i, player in enumerate(exp_sorted[:15], 1):
+            players_to_show = min(15, len(exp_sorted))  # In case we have fewer than 15 valid players
+            
+            for i, player in enumerate(exp_sorted[:players_to_show], 1):
                 top_exp_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
+                
+            # Add placeholder entries if we have fewer than 15 players
+            if players_to_show < 15:
+                for i in range(players_to_show + 1, 16):
+                    top_exp_text += f"{i}. No player qualifying\n"
         else:
             top_exp_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
 
