@@ -42,34 +42,7 @@ async def fetch_clan_data():
 
     try:
         async with aiohttp.ClientSession() as session:
-            # First try to get group competitions which often have more detailed stats
-            competitions_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/competitions"
-            try:
-                async with session.get(competitions_url, headers=headers) as comp_response:
-                    if comp_response.status == 200:
-                        competitions = await comp_response.json()
-                        if competitions and len(competitions) > 0:
-                            # Get the latest competition
-                            latest_comp = max(competitions, key=lambda c: c.get('endsAt', '2000-01-01'))
-                            comp_id = latest_comp.get('id')
-                            
-                            if comp_id:
-                                # Get participants of the latest competition
-                                participants_url = f"{WISE_OLD_MAN_BASE_URL}/competitions/{comp_id}/participants"
-                                async with session.get(participants_url, headers=headers) as part_response:
-                                    if part_response.status == 200:
-                                        participants = await part_response.json()
-                                        if participants and len(participants) > 0:
-                                            # Extract player data
-                                            player_data = [p.get('player') for p in participants if p.get('player')]
-                                            if len(player_data) > 0:
-                                                print(f"Successfully fetched {len(player_data)} players from competition data")
-                                                return player_data
-            except Exception as comp_error:
-                print(f"Error fetching competition data: {comp_error}")
-                # Continue to other methods if this fails
-            
-            # Try to get hiscores data directly (most efficient)
+            # First try to get hiscores data directly (most efficient)
             hiscores_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores?metric=overall&limit=100"
             try:
                 async with session.get(hiscores_url, headers=headers) as hiscores_response:
@@ -78,13 +51,70 @@ async def fetch_clan_data():
                         
                         # Extract player data from hiscores
                         player_data = []
+                        player_ids = []
                         for entry in hiscores_data:
                             if 'player' in entry:
                                 player_data.append(entry['player'])
+                                # Track player IDs for deduplication later
+                                if 'id' in entry['player']:
+                                    player_ids.append(entry['player']['id'])
                         
                         if len(player_data) > 0:
                             print(f"Successfully fetched hiscores data for {len(player_data)} players")
-                            return player_data
+                            
+                            # Now fetch detailed data for top 20 players
+                            detailed_players = []
+                            top_players = sorted(player_data, key=lambda p: p.get('exp', 0) if isinstance(p.get('exp'), (int, float)) else 0, reverse=True)[:20]
+                            
+                            for player in top_players:
+                                username = player.get('username')
+                                if not username:
+                                    continue
+                                
+                                # Add slight delay to avoid rate limiting
+                                await asyncio.sleep(0.2)
+                                player_details_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
+                                
+                                try:
+                                    async with session.get(player_details_url, headers=headers) as player_response:
+                                        if player_response.status == 200:
+                                            player_details = await player_response.json()
+                                            if player_details:
+                                                detailed_players.append(player_details)
+                                except Exception as player_error:
+                                    print(f"Error fetching detailed data for {username}: {player_error}")
+                            
+                            # Add boss hiscores data separately to ensure we get boss KC
+                            for boss in ["zulrah", "vorkath", "chambers_of_xeric", "tombs_of_amascut"]:
+                                boss_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores?metric={boss}&limit=10"
+                                try:
+                                    async with session.get(boss_url, headers=headers) as boss_response:
+                                        if boss_response.status == 200:
+                                            boss_data = await boss_response.json()
+                                            for entry in boss_data:
+                                                if 'player' in entry and entry['player'].get('id') not in player_ids:
+                                                    player_data.append(entry['player'])
+                                                    player_ids.append(entry['player'].get('id'))
+                                except Exception as boss_error:
+                                    print(f"Error fetching {boss} data: {boss_error}")
+                            
+                            # Combine detailed players with the regular data
+                            combined_data = []
+                            
+                            # First add all detailed players
+                            for detailed_player in detailed_players:
+                                player_id = detailed_player.get('id')
+                                if player_id:
+                                    combined_data.append(detailed_player)
+                                    player_ids.remove(player_id) if player_id in player_ids else None
+                            
+                            # Then add remaining players that weren't part of the detailed fetch
+                            for player in player_data:
+                                player_id = player.get('id')
+                                if player_id in player_ids:
+                                    combined_data.append(player)
+                            
+                            return combined_data
                     else:
                         print(f"Failed to fetch hiscores data: {hiscores_response.status}")
             except Exception as hiscores_error:
@@ -427,8 +457,8 @@ class RefreshButton(discord.ui.View):
     @discord.ui.button(label="Refresh Highscores", style=discord.ButtonStyle.primary, emoji="🔄", custom_id="refresh_highscores_button")
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            # Use ephemeral response instead of defer to avoid timeout issues
-            await interaction.response.send_message("Refreshing highscores... Please wait a moment.", ephemeral=True)
+            # Defer the response to buy time for processing
+            await interaction.response.defer(ephemeral=True)
             
             print(f"Refresh button clicked by {interaction.user}")
             clan_data = await fetch_clan_data()
@@ -483,14 +513,7 @@ def create_highscores_embed(clan_data):
     def get_total_level_and_exp(player: Dict) -> Tuple[int, int]:
         try:
             # Try to get the player's experience from different sources
-            # First check if exp is directly on the player object
-            if isinstance(player.get('exp'), (int, float)) and player['exp'] > 0:
-                exp = player['exp']
-                # Estimate level based on exp
-                level = min(126, max(3, int(exp / 100000))) 
-                return (level, exp)
-            
-            # Check latestSnapshot
+            # First check latestSnapshot
             if player.get('latestSnapshot') and player['latestSnapshot'].get('data'):
                 data = player['latestSnapshot'].get('data', {})
                 skills = data.get('skills', {})
@@ -508,6 +531,13 @@ def create_highscores_embed(clan_data):
                 exp = overall.get('experience', 0)
                 if level > 0 or exp > 0:
                     return (level, exp)
+            
+            # Check if exp is directly on the player object
+            if isinstance(player.get('exp'), (int, float)) and player['exp'] > 0:
+                exp = player['exp']
+                # Estimate level based on exp
+                level = min(2277, max(3, int(exp / 100000))) 
+                return (level, exp)
                 
             # If player has neither stats nor latestSnapshot but has total level
             if isinstance(player.get('ehp'), (int, float)) and player['ehp'] > 0:
@@ -526,7 +556,9 @@ def create_highscores_embed(clan_data):
         reverse=True
     )
 
-    top_players = sorted_players[:10]
+    # Filter out players with 0 level/exp
+    valid_players = [p for p in sorted_players if get_total_level_and_exp(p)[0] > 0]
+    top_players = valid_players[:10]
 
     # Add top 10 by total level field
     top_level_text = ""
@@ -534,11 +566,6 @@ def create_highscores_embed(clan_data):
         username = player.get('username', 'Unknown')
         display_name = player.get('displayName', username)
         level, exp = get_total_level_and_exp(player)
-        
-        # Skip players with 0 level/exp
-        if level == 0 and exp == 0:
-            continue
-            
         top_level_text += f"**{index}.** {display_name} | Lvl: {level} | XP: {exp:,}\n"
 
     embed.add_field(name="Top 10 by Total Level", value=top_level_text or "No data available", inline=False)
@@ -570,20 +597,28 @@ def create_highscores_embed(clan_data):
                         return (level, exp)
                         
                 # If getting from direct fields didn't work, try to estimate from the player's other fields
-                # For example, for combat skills we could estimate based on total exp
-                if skill in ["attack", "strength", "defence", "hitpoints"] and isinstance(player.get('exp'), (int, float)) and player['exp'] > 0:
+                if isinstance(player.get('exp'), (int, float)) and player['exp'] > 0:
                     total_exp = player['exp']
-                    est_level = min(99, max(1, int((total_exp / 1000000) * 3)))
-                    est_exp = int(total_exp / 10)
-                    return (est_level, est_exp)
+                    # Different estimation strategies for different skills
+                    if skill in ["attack", "strength", "defence", "hitpoints"]:
+                        est_level = min(99, max(1, int((total_exp / 1000000) * 3)))
+                        est_exp = int(total_exp / 10)
+                        return (est_level, est_exp)
+                    elif skill in ["ranged", "prayer", "magic"]:
+                        est_level = min(99, max(1, int((total_exp / 1200000) * 3)))
+                        est_exp = int(total_exp / 12)
+                        return (est_level, est_exp)
                     
             except Exception as e:
                 print(f"Error getting {skill} data for {player.get('username', 'Unknown')}: {e}")
             return (0, 0)
 
+        # Get players with non-zero skill data
+        valid_skill_players = [p for p in clan_data if get_skill_data(p)[0] > 0]
+        
         # Sort players by skill level, then by experience
         skill_sorted = sorted(
-            clan_data,
+            valid_skill_players,
             key=lambda p: (get_skill_data(p)[0], get_skill_data(p)[1]),
             reverse=True
         )[:5]  # Top 5 to keep embed manageable
@@ -592,28 +627,51 @@ def create_highscores_embed(clan_data):
         for index, player in enumerate(skill_sorted, 1):
             display_name = player.get('displayName', player.get('username', 'Unknown'))
             level, exp = get_skill_data(player)
-            if level > 0:
-                skill_text += f"{index}. {display_name} ({level})\n"
+            skill_text += f"{index}. {display_name} ({level})\n"
         
         if skill_text:
             embed.add_field(name=skill.title(), value=skill_text, inline=True)
         else:
             embed.add_field(name=skill.title(), value="No data", inline=True)
 
-    # Add a field for boss KC if we have any
-    boss_text = ""
-    for player in sorted_players[:5]:
-        if player.get('latestSnapshot') and player['latestSnapshot'].get('data') and player['latestSnapshot']['data'].get('bosses'):
-            bosses = player['latestSnapshot']['data'].get('bosses', {})
-            # Take the first boss with non-zero KC
-            for boss_name, kc in bosses.items():
-                if kc > 0:
-                    display_name = player.get('displayName', player.get('username', 'Unknown'))
-                    boss_text += f"{display_name}: {boss_name.replace('_', ' ').title()} ({kc})\n"
-                    break
-
-    if boss_text:
-        embed.add_field(name="Notable Boss KC", value=boss_text, inline=False)
+    # Add a field for boss KC
+    # Most common bosses
+    popular_bosses = ["zulrah", "vorkath", "chambers_of_xeric", "tombs_of_amascut", "the_gauntlet", "theatre_of_blood"]
+    
+    for boss_name in popular_bosses:
+        boss_text = ""
+        
+        def get_boss_kc(player: Dict) -> int:
+            try:
+                if player.get('latestSnapshot') and player['latestSnapshot'].get('data') and player['latestSnapshot']['data'].get('bosses'):
+                    bosses = player['latestSnapshot']['data'].get('bosses', {})
+                    if boss_name in bosses:
+                        kc = bosses[boss_name]
+                        if isinstance(kc, (int, float)) and kc > 0:
+                            return kc
+                if player.get('stats') and player.get('stats').get('bosses') and boss_name in player.get('stats').get('bosses', {}):
+                    kc = player.get('stats').get('bosses', {}).get(boss_name, 0)
+                    if isinstance(kc, (int, float)) and kc > 0:
+                        return kc
+            except Exception as e:
+                print(f"Error getting KC for {boss_name} from {player.get('username', 'Unknown')}: {e}")
+            return 0
+        
+        boss_players = [p for p in clan_data if get_boss_kc(p) > 0]
+        sorted_boss_players = sorted(boss_players, key=get_boss_kc, reverse=True)[:3]
+        
+        for idx, player in enumerate(sorted_boss_players, 1):
+            kc = get_boss_kc(player)
+            if kc > 0:
+                display_name = player.get('displayName', player.get('username', 'Unknown'))
+                boss_text += f"{idx}. {display_name}: {kc} KC\n"
+        
+        if boss_text:
+            embed.add_field(
+                name=boss_name.replace('_', ' ').title(), 
+                value=boss_text, 
+                inline=True
+            )
 
     # Add timestamp and footer
     embed.timestamp = discord.utils.utcnow()
@@ -624,8 +682,8 @@ def create_highscores_embed(clan_data):
 @bot.tree.command(name="clanhighscores", description="Show clan highscores")
 async def clanhighscores(interaction: discord.Interaction):
     try:
-        # Use ephemeral thinking response first, which is less likely to time out
-        await interaction.response.send_message("Fetching clan highscores...", ephemeral=True)
+        # Defer the response to buy time for processing
+        await interaction.response.defer(ephemeral=True)
         
         clan_data = await fetch_clan_data()
         if not clan_data:
@@ -728,6 +786,24 @@ async def on_ready():
         # Register the persistent view for the refresh button
         bot.add_view(RefreshButton(bot))
         print("Registered persistent view for refresh button")
+        
+        # Try to retrieve existing highscores messages and add views to them
+        if CHANNEL_ID:
+            try:
+                channel = bot.get_channel(CHANNEL_ID)
+                if channel:
+                    # Try to get the last 10 messages to find highscores messages
+                    async for message in channel.history(limit=10):
+                        if message.author == bot.user and message.embeds and len(message.embeds) > 0:
+                            embed = message.embeds[0]
+                            if embed.title and "OSRS Defence Clan Highscores" in embed.title:
+                                # This is a highscores message, add the view to it
+                                await message.edit(view=RefreshButton(bot))
+                                highscore_messages["main"] = message
+                                print(f"Restored view for existing highscores message (ID: {message.id})")
+                                break
+            except Exception as hist_error:
+                print(f"Error retrieving channel history: {hist_error}")
         
         # Start the automatic update task
         if not update_highscores_task.is_running():
