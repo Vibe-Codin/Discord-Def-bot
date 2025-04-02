@@ -36,20 +36,33 @@ async def fetch_clan_data():
     try:
         headers = {
             'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'User-Agent': 'Discord-Bot/1.0'
         }
         async with aiohttp.ClientSession() as session:
-            url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats"  # Updated endpoint with stats
-            print(f"Fetching clan data from: {url}")
+            url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"  # First fetch group details
+            print(f"Fetching group details from: {url}")
             async with session.get(url, headers=headers) as resp:
+                if resp.status == 404:
+                    print("Group not found. Please verify the group ID.")
+                    return None
                 if resp.status != 200:
                     print(f"Error status: {resp.status}")
                     error_text = await resp.text()
                     print(f"Error response: {error_text}")
                     return None
-                data = await resp.json()
-                print(f"Successfully fetched data for {len(data)} members")
-                return data
+                
+                # Now fetch the members stats
+                url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
+                print(f"Fetching members data from: {url}")
+                async with session.get(url, headers=headers) as resp:
+                    if resp.status != 200:
+                        print(f"Error status: {resp.status}")
+                        error_text = await resp.text()
+                        print(f"Error response: {error_text}")
+                        return None
+                    data = await resp.json()
+                    print(f"Successfully fetched data for {len(data)} members")
+                    return data
     except Exception as e:
         print(f"Error fetching clan data: {str(e)}")
         return None
