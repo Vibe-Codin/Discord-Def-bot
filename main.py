@@ -126,6 +126,10 @@ class SkillsDropdown(discord.ui.Select):
 
             # Check if we have a cached embed
             cached_entry = self.cached_embeds.get(selected_value, None)
+            cache_age = 0
+
+            if cached_entry and hasattr(self.bot, 'cache_times') and selected_value in self.bot.cache_times:
+                cache_age = current_time - self.bot.cache_times[selected_value]
 
             if cached_entry:
                 embed = cached_entry
@@ -181,17 +185,15 @@ class BossesDropdown(discord.ui.Select):
             # Overview option
             discord.SelectOption(label="Boss Overview", value="bosses_overview", description="Overview of top boss kills"),
             # Core bosses from the specified list
+            discord.SelectOption(label="Amoxliatl", value="amoxliatl", description="Amoxliatl boss highscores"),
             discord.SelectOption(label="Barrows Chests", value="barrows_chests", description="Barrows Chests highscores"),
             discord.SelectOption(label="Bryophyta", value="bryophyta", description="Bryophyta boss highscores"),
             discord.SelectOption(label="Callisto", value="callisto", description="Callisto boss highscores"),
+            discord.SelectOption(label="Cerberus", value="cerberus", description="Cerberus boss highscores"),
             discord.SelectOption(label="Chambers of Xeric", value="chambers_of_xeric", description="Chambers of Xeric boss highscores"),
-            discord.SelectOption(label="Chambers of Xeric CM", value="chambers_of_xeric_challenge_mode", description="Chambers of Xeric CM highscores"),
             discord.SelectOption(label="Chaos Elemental", value="chaos_elemental", description="Chaos Elemental highscores"),
-            discord.SelectOption(label="Chaos Fanatic", value="chaos_fanatic", description="Chaos Fanatic highscores"),
             discord.SelectOption(label="Commander Zilyana", value="commander_zilyana", description="Commander Zilyana boss highscores"),
             discord.SelectOption(label="Corporeal Beast", value="corporeal_beast", description="Corporeal Beast highscores"),
-            discord.SelectOption(label="Crazy Archaeologist", value="crazy_archaeologist", description="Crazy Archaeologist highscores"),
-            discord.SelectOption(label="Deranged Archaeologist", value="deranged_archaeologist", description="Deranged Archaeologist highscores"),
             discord.SelectOption(label="Giant Mole", value="giant_mole", description="Giant Mole boss highscores"),
             discord.SelectOption(label="Kalphite Queen", value="kalphite_queen", description="Kalphite Queen boss highscores"),
             discord.SelectOption(label="King Black Dragon", value="king_black_dragon", description="King Black Dragon highscores"),
@@ -199,12 +201,12 @@ class BossesDropdown(discord.ui.Select):
             discord.SelectOption(label="Obor", value="obor", description="Obor boss highscores"),
             discord.SelectOption(label="Sarachnis", value="sarachnis", description="Sarachnis boss highscores"),
             discord.SelectOption(label="Scorpia", value="scorpia", description="Scorpia boss highscores"),
-            discord.SelectOption(label="Scurrius", value="scurrius", description="Scurrius boss highscores"),
+            discord.SelectOption(label="Skotizo", value="skotizo", description="Skotizo boss highscores"),
             discord.SelectOption(label="Tempoross", value="tempoross", description="Tempoross boss highscores"),
-            discord.SelectOption(label="The Hueycoatl", value="the_hueycoatl", description="The Hueycoatl highscores"),
-            discord.SelectOption(label="The Royal Titans", value="the_royal_titans", description="The Royal Titans highscores"),
+            discord.SelectOption(label="TzTok-Jad", value="tztok_jad", description="TzTok-Jad highscores"),
             discord.SelectOption(label="Venenatis", value="venenatis", description="Venenatis boss highscores"),
             discord.SelectOption(label="Vetion", value="vetion", description="Vetion boss highscores"),
+            discord.SelectOption(label="Wintertodt", value="wintertodt", description="Wintertodt boss highscores"),
         ]
 
         super().__init__(placeholder="Select a boss category...", min_values=1, max_values=1, options=options)
@@ -280,6 +282,7 @@ class WOMClient:
         self.cache = {}  # Simple cache for API responses
         self.cache_expiry = {}  # Track when cache entries expire
         self.CACHE_DURATION = 86400  # Cache duration in seconds (24 hours)
+        self.api_semaphore = asyncio.Semaphore(5) # Added semaphore here
 
     async def _get_cached_or_fetch(self, cache_key, url, params=None, timeout=15):
         current_time = time.time()
@@ -292,11 +295,12 @@ class WOMClient:
         # Make the API request with retry logic for rate limits
         max_retries = 5  # Increased max retries
         retry_count = 0
-        
+
         while retry_count <= max_retries:
             try:
-                response = self.session.get(url, params=params, timeout=timeout)
-                
+                async with self.api_semaphore: # Acquire semaphore before making request
+                    response = self.session.get(url, params=params, timeout=timeout)
+
                 if response.status_code == 200:
                     data = response.json()
                     # Cache the successful response
@@ -330,19 +334,13 @@ class WOMClient:
                         print(f"Using older cached data for {cache_key} as fallback after error")
                         return self.cache[cache_key]
                     return None
-        
+
         # If we've exhausted all retries
         return None
 
     async def get_group_details(self, group_id):
         cache_key = f"group_details_{group_id}"
         url = f"{self.base_url}/groups/{group_id}"
-        return await self._get_cached_or_fetch(cache_key, url)
-
-    async def get_group_members(self, group_id):
-        """Get all members of a group"""
-        cache_key = f"group_members_{group_id}"
-        url = f"{self.base_url}/groups/{group_id}/members"
         return await self._get_cached_or_fetch(cache_key, url)
 
     async def get_group_hiscores(self, group_id, metric='overall'):
@@ -502,135 +500,134 @@ class HighscoresBot(discord.Client):
             return True
 
     async def create_total_level_embed(self, group_name):
-        """Create an embed for total level using the Records API"""
-        try:
-            # Prepare highscores embed
-            embed = discord.Embed(
-                title=f"{group_name} Highscores - Total Level",
-                description=f"Top players in {group_name} by total level (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
-                color=0x3498db,
-                timestamp=datetime.now()
-            )
+        # Get overall hiscores for total level ranking
+        overall_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric='overall')
+        if not overall_hiscores:
+            return None
 
-            # Get the members of the group first
-            group_members = await self.wom_client.get_group_members(self.GROUP_ID)
-            if not group_members:
-                embed.add_field(name="Error", value="Could not fetch group members.", inline=False)
-                return embed
+        # Prepare highscores embed
+        embed = discord.Embed(
+            title=f"{group_name} Highscores - Total Level",
+            description=f"Top players in {group_name} by total level (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+            color=0x3498db,
+            timestamp=datetime.now()
+        )
 
-            # Create a set of player IDs for faster lookup
-            group_member_ids = {member['playerId'] for member in group_members}
-            
-            # Batch processing to avoid rate limits
-            processed_players = []
-            valid_player_count = 0
-            excluded_count = 0
-            
-            # First, get records leaderboard for Overall (total level)
-            record_params = {
-                'metric': 'overall',
-                'period': 'week',  # Use week for more recent data
-                'limit': 50  # Get more players to filter
-            }
-            records_url = f"{self.wom_client.base_url}/records/leaderboard"
-            
-            print(f"Fetching records leaderboard for total level")
-            response = requests.get(records_url, params=record_params, timeout=20)
-            
-            if response.status_code == 200:
-                leaderboard_records = response.json()
-                
-                # Check each record and filter for group members and valid players
-                for record in leaderboard_records:
-                    try:
-                        # Check if player is in our group
-                        player_id = record['playerId']
-                        if player_id not in group_member_ids:
-                            continue
-                        
-                        # Get player name and validate
-                        player_name = record['player']['displayName']
-                        is_valid = await self.is_valid_player(player_name)
-                        
-                        if is_valid:
-                            # Get player details from the record
-                            total_level = 0
-                            total_exp = 0
-                            
-                            # Most reliable source is the player object
-                            if 'player' in record:
-                                if 'exp' in record['player']:
-                                    total_exp = record['player']['exp']
-                            
-                            # Get total level from the snapshot if available
-                            player_details = await self.wom_client.get_player_details(player_name)
-                            if player_details and 'latestSnapshot' in player_details:
-                                snapshot = player_details['latestSnapshot']
-                                if 'data' in snapshot and 'skills' in snapshot['data'] and 'overall' in snapshot['data']['skills']:
-                                    overall = snapshot['data']['skills']['overall']
-                                    if 'level' in overall:
-                                        total_level = overall['level']
-                            
-                            # Add to processed players
-                            processed_players.append({
-                                'name': player_name,
-                                'total_level': total_level,
-                                'total_exp': total_exp
-                            })
-                            valid_player_count += 1
-                        else:
-                            print(f"FILTERED OUT: {player_name} - over combat skill limit or missing data")
-                            excluded_count += 1
-                    except Exception as e:
-                        print(f"Error processing player record: {str(e)}")
-                
-            else:
-                print(f"Error fetching records leaderboard: {response.status_code}")
-                embed.add_field(name="Error", value=f"Could not fetch records leaderboard. Status code: {response.status_code}", inline=False)
-                return embed
+        # Process all players to get total levels and experience
+        processed_players = []
+        valid_player_count = 0
+        excluded_count = 0
+        rate_limited_count = 0
 
-            # If we have enough players, sort and display them
-            if processed_players:
-                # Sort players by total level and then by total exp (both descending)
-                processed_players.sort(key=lambda x: (-x['total_level'], -x['total_exp']))
-                
-                # Add the top 15 by Total Level
-                top_level_text = ""
-                level_sorted = sorted(processed_players, key=lambda x: (-x['total_level'], -x['total_exp']))
-                for i, player in enumerate(level_sorted[:15], 1):
-                    top_level_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
-                
-                # Add the top 15 by Total Experience
-                top_exp_text = ""
-                exp_sorted = sorted(processed_players, key=lambda x: -x['total_exp'])
-                for i, player in enumerate(exp_sorted[:15], 1):
-                    top_exp_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
-                
-                embed.add_field(name="Top 15 Players by Total Level", value=top_level_text, inline=False)
-                embed.add_field(name="Top 15 Players by Total Experience", value=top_exp_text, inline=False)
-            else:
-                embed.add_field(name="No Results", value="No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)", inline=False)
-            
-            print(f"Filtering stats: {valid_player_count} players included, {excluded_count} excluded")
-            embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')} | {valid_player_count} valid players")
-            
-            return embed
-            
-        except Exception as e:
-            print(f"Error creating total level embed: {str(e)}")
-            error_embed = discord.Embed(
-                title="Error",
-                description=f"An error occurred while creating the total level highscores: {str(e)}",
-                color=0xFF0000
-            )
-            return error_embed
+        # Use a bounded semaphore to limit concurrent API calls
+        # and process players in batches to avoid overwhelming the API
+
+        print(f"Processing up to 30 players for total level highscores")
+
+        # Process players in batches to validate them
+        batch_size = 5  # Reduced batch size to avoid rate limits
+        # Process up to 30 players to get at least 20 valid ones
+        max_players_to_check = min(30, len(overall_hiscores))
+        batches = [overall_hiscores[i:i+batch_size] for i in range(0, max_players_to_check, batch_size)]
+
+        # Track how many players we've fully processed
+        players_processed = 0
+
+        for batch_index, batch in enumerate(batches):
+            # Create tasks for validating all players in the batch concurrently
+            validation_tasks = []
+            for entry in batch:
+                player_name = entry['player']['displayName']
+                validation_tasks.append((player_name, entry, asyncio.create_task(self.is_valid_player(player_name))))
+
+            # Process results as they complete
+            for player_name, entry, validation_task in validation_tasks:
+                try:
+                    players_processed += 1
+                    is_valid = await validation_task
+
+                    if not is_valid:
+                        print(f"FILTERED OUT: {player_name} - over combat skill limit or missing data")
+                        excluded_count += 1
+                        continue  # Skip this player
+
+                    valid_player_count += 1
+
+                    # Use the level field directly from the API for total level
+                    total_level = 0
+                    total_exp = 0
+
+                    # Get total level and exp from the API
+                    if 'data' in entry:
+                        if 'level' in entry['data']:
+                            total_level = entry['data']['level']
+                        if 'experience' in entry['data']:
+                            total_exp = entry['data']['experience']
+
+                    # Fallback if we couldn't find it in the expected location
+                    if total_level == 0 and 'player' in entry and 'exp' in entry['player']:
+                        total_exp = entry['player']['exp']
+
+                    processed_players.append({
+                        'name': player_name,
+                        'total_level': total_level,
+                        'total_exp': total_exp
+                    })
+
+                except Exception as e:
+                    if "429" in str(e):
+                        print(f"Rate limited while processing player {player_name}. Waiting before retrying.")
+                        rate_limited_count += 1
+                    else:
+                        print(f"Error processing player {player_name}: {str(e)}")
+
+            # Larger delay between batches to avoid rate limiting
+            # Exponential backoff based on batch index
+            delay = min(1.0 + (batch_index * 0.5), 5.0)  # Gradually increase delay up to 5 seconds
+            print(f"Waiting {delay:.1f}s before next batch to avoid rate limits...")
+            await asyncio.sleep(delay)
+
+        print(f"Processed a total of {players_processed} players out of requested {max_players_to_check}")
+
+        # Print the actual number of players we processed vs filtered
+        print(f"Processed {len(processed_players)} valid players from {max_players_to_check} total checked")
+
+        # Sort players by total level and then by total exp (both descending)
+        processed_players.sort(key=lambda x: (-x['total_level'], -x['total_exp']))
+
+        # Add the top 15 by Total Level
+        top_level_text = ""
+        if processed_players:
+            # Sort by total level first, then by total exp
+            level_sorted = sorted(processed_players, key=lambda x: (-x['total_level'], -x['total_exp']))
+            for i, player in enumerate(level_sorted[:15], 1):
+                top_level_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
+        else:
+            top_level_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
+
+        # Add the top 15 by Total Experience
+        top_exp_text = ""
+        if processed_players:
+            # Sort purely by total exp
+            exp_sorted = sorted(processed_players, key=lambda x: -x['total_exp'])
+            for i, player in enumerate(exp_sorted[:15], 1):
+                top_exp_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
+        else:
+            top_exp_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
+
+        embed.add_field(name="Top 15 Players by Total Level", value=top_level_text, inline=False)
+        embed.add_field(name="Top 15 Players by Total Experience", value=top_exp_text, inline=False)
+        print(f"Filtering stats: {valid_player_count} players included, {excluded_count} excluded")
+        embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')} | {valid_player_count} valid players")
+
+        return embed
 
     async def create_skills_embed(self, group_name, part=1):
         # All skills, excluding Attack, Strength, Magic, and Ranged
         all_skills = [
             'defence', 'hitpoints', 'prayer', 
             'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting',
-            'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',
+            'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer,
             'farming', 'runecrafting', 'hunter', 'construction'
         ]
 
@@ -675,7 +672,7 @@ class HighscoresBot(discord.Client):
             validation_tasks = []
             for entry in batch:
                 player_name = entry['player']['displayName']
-                validation_tasks.append((player_name, self.is_valid_player(player_name)))
+                validation_tasks.append((player_name, asyncio.create_task(self.is_valid_player(player_name))))
 
             # Process the results
             for player_name, validation_task in validation_tasks:
@@ -702,7 +699,7 @@ class HighscoresBot(discord.Client):
                 validation_tasks = []
                 for entry in current_batch:
                     player_name = entry['player']['displayName']
-                    validation_tasks.append((entry, self.is_valid_player(player_name)))
+                    validation_tasks.append((entry, asyncio.create_task(self.is_valid_player(player_name))))
 
                 for entry, validation_task in validation_tasks:
                     is_valid = await validation_task
@@ -712,7 +709,7 @@ class HighscoresBot(discord.Client):
                         skill_level = 0
                         exp = 0
 
-                                                # Get data from the entry
+                        # Get data from the entry
                         if 'data' in entry:
                             data = entry['data']
                             if 'level' in data:
@@ -833,7 +830,7 @@ class HighscoresBot(discord.Client):
                 validation_tasks = []
                 for entry in batch:
                     player_name = entry['player']['displayName']
-                    validation_tasks.append((player_name, entry, self.is_valid_player(player_name)))
+                    validation_tasks.append((player_name, entry, asyncio.create_task(self.is_valid_player(player_name))))
 
                 # Process results in order of completion
                 valid_entries = []
@@ -907,7 +904,7 @@ class HighscoresBot(discord.Client):
         return await self.create_bosses_embed(group_name, part=5)
 
     async def create_single_category_embed(self, category):
-        """Create an embed for a single skill or boss category using Records API"""
+        """Create an embed for a single skill or boss category showing top 20 players"""
         try:
             # Get group name
             group_name = "OSRS Defence"  # Default name
@@ -936,86 +933,60 @@ class HighscoresBot(discord.Client):
                 timestamp=datetime.now()
             )
 
-            # Get the members of the group first
-            group_members = await self.wom_client.get_group_members(self.GROUP_ID)
-            if not group_members:
-                embed.add_field(name="Error", value="Could not fetch group members.", inline=False)
+            # Get the highscores for this category
+            highscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=category)
+            if not highscores:
+                embed.add_field(name="Error", value="Could not fetch highscores for this category", inline=False)
                 return embed
 
-            # Create a set of player IDs for faster lookup
-            group_member_ids = {member['playerId'] for member in group_members}
-            
-            # Get records leaderboard for this category
-            record_params = {
-                'metric': category,
-                'period': 'week',  # Use week for more recent data
-                'limit': 50  # Get more players to filter
-            }
-            records_url = f"{self.wom_client.base_url}/records/leaderboard"
-            
-            print(f"Fetching records leaderboard for {category}")
-            response = requests.get(records_url, params=record_params, timeout=20)
-            
+            # Process players in batches
             valid_players = []
-            
-            if response.status_code == 200:
-                leaderboard_records = response.json()
-                
-                # Check each record and filter for group members and valid players
-                for record in leaderboard_records:
-                    try:
-                        # Check if player is in our group
-                        player_id = record['playerId']
-                        if player_id not in group_member_ids:
-                            continue
-                        
-                        # Get player name and validate
-                        player_name = record['player']['displayName']
-                        is_valid = await self.is_valid_player(player_name)
-                        
-                        if is_valid:
-                            # Process based on whether it's a skill or boss
-                            if is_skill:
-                                # Get the level and XP from player details
-                                player_details = await self.wom_client.get_player_details(player_name)
-                                level = 1  # Default
-                                exp = record['value']  # Use record value as XP
-                                
-                                # Try to get level from player details
-                                if player_details and 'latestSnapshot' in player_details:
-                                    snapshot = player_details['latestSnapshot']
-                                    if 'data' in snapshot and 'skills' in snapshot['data'] and category in snapshot['data']['skills']:
-                                        skill_data = snapshot['data']['skills'][category]
-                                        if 'level' in skill_data:
-                                            level = skill_data['level']
-                                
-                                # Only include if they have XP 
+            batch_size = 10
+            batches = [highscores[i:i+batch_size] for i in range(0, min(60, len(highscores)), batch_size)]
+
+            for batch in batches:
+                # Create validation tasks
+                validation_tasks = []
+                for entry in batch:
+                    player_name = entry['player']['displayName']
+                    validation_tasks.append((entry, asyncio.create_task(self.is_valid_player(player_name))))
+
+                # Process results
+                for entry, validation_task in validation_tasks:
+                    is_valid = await validation_task
+                    if is_valid:
+                        player_name = entry['player']['displayName']
+
+                        # Get appropriate data based on whether it's a skill or boss
+                        if is_skill:
+                            if 'data' in entry and 'level' in entry['data'] and 'experience' in entry['data']:
+                                level = entry['data']['level']
+                                exp = entry['data']['experience']
+                                # Only include if they have XP in this skill
                                 if exp > 0:
                                     valid_players.append({
                                         'name': player_name,
                                         'level': level,
                                         'exp': exp
                                     })
-                            else:  # It's a boss
-                                # For bosses, the record value is the kill count
-                                kills = record['value']
-                                
-                                # Only include if they have kills
+                        else:  # It's a boss
+                            if 'data' in entry and 'kills' in entry['data']:
+                                kills = entry['data']['kills']
+                                # Only include if they have kills for this boss
                                 if kills > 0:
                                     valid_players.append({
                                         'name': player_name,
                                         'kills': kills
                                     })
-                    except Exception as e:
-                        print(f"Error processing player record for {category}: {str(e)}")
-            else:
-                print(f"Error fetching records leaderboard: {response.status_code}")
-                
-                # Fallback to group highscores if records API fails
-                print("Falling back to group highscores API")
-                return await self.create_single_category_embed_fallback(category, group_name)
 
-            # Sort and build the embed
+                        # If we have enough players, stop processing
+                        if len(valid_players) >= 15:  # We only display 15 anyway
+                            break
+
+                        # Small delay between batches
+                        await asyncio.sleep(0.1)
+
+            # Sort the players appropriately
             if is_skill:
                 # Sort by level first, then by exp
                 valid_players.sort(key=lambda x: (-x['level'], -x['exp']))
@@ -1058,120 +1029,8 @@ class HighscoresBot(discord.Client):
             )
             return error_embed
 
-    async def create_single_category_embed_fallback(self, category, group_name):
-        """Fallback method using group highscores if Records API fails"""
-        try:
-            # Check if it's a skill or boss
-            all_skills = [
-                'defence', 'hitpoints', 'prayer', 'cooking', 'woodcutting', 
-                'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 
-                'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 
-                'runecrafting', 'hunter', 'construction'
-            ]
-
-            is_skill = category in all_skills
-            display_name = ' '.join(word.capitalize() for word in category.split('_'))
-
-            # Create the embed
-            embed = discord.Embed(
-                title=f"{group_name} Highscores - {display_name} (Fallback)",
-                description=f"Top 15 players in {display_name} for {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
-                color=0x3498db,
-                timestamp=datetime.now()
-            )
-
-            # Get the highscores for this category
-            highscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=category)
-            if not highscores:
-                embed.add_field(name="Error", value="Could not fetch highscores for this category", inline=False)
-                return embed
-
-            # Process players in batches
-            valid_players = []
-            batch_size = 5  # Smaller batches
-            batches = [highscores[i:i+batch_size] for i in range(0, min(30, len(highscores)), batch_size)]
-
-            for batch_index, batch in enumerate(batches):
-                # Create validation tasks
-                validation_tasks = []
-                for entry in batch:
-                    player_name = entry['player']['displayName']
-                    validation_tasks.append((entry, self.is_valid_player(player_name)))
-
-                # Process results
-                for entry, validation_task in validation_tasks:
-                    is_valid = await validation_task
-                    if is_valid:
-                        player_name = entry['player']['displayName']
-
-                        # Get appropriate data based on whether it's a skill or boss
-                        if is_skill:
-                            if 'data' in entry and 'level' in entry['data'] and 'experience' in entry['data']:
-                                level = entry['data']['level']
-                                exp = entry['data']['experience']
-                                # Only include if they have XP in this skill
-                                if exp > 0:
-                                    valid_players.append({
-                                        'name': player_name,
-                                        'level': level,
-                                        'exp': exp
-                                    })
-                        else:  # It's a boss
-                            if 'data' in entry and 'kills' in entry['data']:
-                                kills = entry['data']['kills']
-                                # Only include if they have kills for this boss
-                                if kills > 0:
-                                    valid_players.append({
-                                        'name': player_name,
-                                        'kills': kills
-                                    })
-
-                        # If we have enough players, stop processing
-                        if len(valid_players) >= 15:  # We only display 15 anyway
-                            break
-
-                # Small delay between batches to avoid rate limiting
-                delay = min(1.0 + (batch_index * 0.5), 3.0)
-                await asyncio.sleep(delay)
-
-            # Sort and build the embed (same as main method)
-            if is_skill:
-                valid_players.sort(key=lambda x: (-x['level'], -x['exp']))
-                player_list_text = ""
-                for i, player in enumerate(valid_players[:15], 1):
-                    player_list_text += f"{i}. {player['name']} | Lvl: {player['level']} | XP: {player['exp']:,}\n"
-
-                if player_list_text:
-                    embed.add_field(name=f"Top Players in {display_name}", value=player_list_text, inline=False)
-                else:
-                    embed.add_field(name=f"Top Players in {display_name}", value="No players found with levels in this skill", inline=False)
-            else:
-                valid_players.sort(key=lambda x: -x['kills'])
-                player_list_text = ""
-                for i, player in enumerate(valid_players[:15], 1):
-                    player_list_text += f"{i}. {player['name']} | KC: {player['kills']:,}\n"
-
-                if player_list_text:
-                    embed.add_field(name=f"Top Players at {display_name}", value=player_list_text, inline=False)
-                else:
-                    embed.add_field(name=f"Top Players at {display_name}", value="No players found with kills for this boss", inline=False)
-
-            # Add footer
-            player_count = len(valid_players)
-            embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')} | {player_count} valid players (fallback method)")
-
-            return embed
-        except Exception as e:
-            print(f"Error in fallback embed creation for {category}: {str(e)}")
-            error_embed = discord.Embed(
-                title="Error",
-                description=f"An error occurred while creating fallback highscores for {category}: {str(e)}",
-                color=0xFF0000
-            )
-            return error_embed
-
     async def create_bosses_overview_embed(self):
-        """Create an overview embed showing top 10 highest KC players across all bosses using Records API"""
+        """Create an overview embed showing top 10 highest KC players across all bosses"""
         try:
             # Get group name
             group_name = "OSRS Defence"  # Default name
@@ -1189,85 +1048,80 @@ class HighscoresBot(discord.Client):
 
             # All bosses to check - specific list of only supported bosses
             all_bosses = [
-                'barrows_chests', 'bryophyta', 'callisto', 
-                'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
+                'amoxliatl', 'barrows_chests', 'bryophyta', 'callisto', 
+                'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
                 'chaos_elemental', 'chaos_fanatic', 'commander_zilyana', 'corporeal_beast', 
-                'crazy_archaeologist', 'deranged_archaeologist', 'giant_mole', 
-                'kalphite_queen', 'king_black_dragon', 'kril_tsutsaroth', 
-                'obor', 'sarachnis', 'scorpia', 'scurrius', 
-                'tempoross', 'the_hueycoatl', 'the_royal_titans', 
-                'venenatis', 'vetion', 'wintertodt'
+                'crazy_archaeologist', 'deranged_archaeologist', 'giant_mole', 'hespori', 
+                'kalphite_queen', 'king_black_dragon', 'kril_tsutsaroth', 'lunar_chests', 
+                'obor', 'sarachnis', 'scorpia', 'scurrius', 'skotizo', 'spindel', 
+                'tempoross', 'the_hueycoatl', 'the_royal_titans', 'thermonuclear_smoke_devil', 
+                'tztok_jad', 'venenatis', 'vetion', 'wintertodt'
             ]
-
-            # Get the members of the group first
-            group_members = await self.wom_client.get_group_members(self.GROUP_ID)
-            if not group_members:
-                embed.add_field(name="Error", value="Could not fetch group members.", inline=False)
-                return embed
-
-            # Create a set of player IDs for faster lookup
-            group_member_ids = {member['playerId'] for member in group_members}
 
             # Store all player KCs across all bosses
             all_kcs = []
 
-            # Process bosses in batches to avoid rate limiting
+            # Process a batch of bosses at a time to avoid rate limiting
             batch_size = 5
             boss_batches = [all_bosses[i:i+batch_size] for i in range(0, len(all_bosses), batch_size)]
 
-            for batch_index, boss_batch in enumerate(boss_batches):
+            for boss_batch in boss_batches:
+                boss_tasks = []
                 for boss_name in boss_batch:
-                    try:
-                        # Format boss name for display
-                        display_name = ' '.join(word.capitalize() for word in boss_name.split('_'))
-                        
-                        # Set up records API parameters
-                        record_params = {
-                            'metric': boss_name,
-                            'period': 'week',  # Use week for more recent data
-                            'limit': 20  # Get more players to filter
-                        }
-                        records_url = f"{self.wom_client.base_url}/records/leaderboard"
-                        
-                        print(f"Fetching records leaderboard for {boss_name}")
-                        response = requests.get(records_url, params=record_params, timeout=20)
-                        
-                        if response.status_code == 200:
-                            leaderboard_records = response.json()
-                            
-                            # Check each record and filter for group members and valid players
-                            for record in leaderboard_records:
-                                try:
-                                    # Check if player is in our group
-                                    player_id = record['playerId']
-                                    if player_id not in group_member_ids:
-                                        continue
-                                    
-                                    # Get player name and validate
-                                    player_name = record['player']['displayName']
-                                    is_valid = await self.is_valid_player(player_name)
-                                    
-                                    if is_valid:
-                                        # For bosses, the record value is the kill count
-                                        kills = record['value']
-                                        
-                                        # Only include if they have kills
+                    # Create a task for each boss in the batch
+                    async def process_boss(boss):
+                        try:
+                            # Format boss name for display
+                            display_name = ' '.join(word.capitalize() for word in boss.split('_'))
+
+                            # Get the highscores for this boss
+                            boss_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=boss)
+                            if not boss_hiscores:
+                                return []
+
+                            # Find valid players with kills
+                            boss_kcs = []
+                            max_to_check = min(5, len(boss_hiscores))  # Check top 5 for each boss
+
+                            # Create validation tasks
+                            validation_tasks = []
+                            for entry in boss_hiscores[:max_to_check]:
+                                player_name = entry['player']['displayName']
+                                validation_tasks.append((entry, asyncio.create_task(self.is_valid_player(player_name))))
+
+                            # Process results
+                            for entry, validation_task in validation_tasks:
+                                is_valid = await validation_task
+                                if is_valid:
+                                    player_name = entry['player']['displayName']
+
+                                    if 'data' in entry and 'kills' in entry['data']:
+                                        kills = entry['data']['kills']
+
+                                        # Only include if they have kills for this boss
                                         if kills > 0:
-                                            all_kcs.append({
+                                            boss_kcs.append({
                                                 'name': player_name,
                                                 'boss': display_name,
                                                 'kills': kills
                                             })
-                                except Exception as e:
-                                    print(f"Error processing player record for boss {boss_name}: {str(e)}")
-                        else:
-                            print(f"Error fetching records leaderboard for {boss_name}: {response.status_code}")
-                    except Exception as e:
-                        print(f"Error processing boss {boss_name}: {str(e)}")
-                
-                # Small delay between batch processing
-                delay = min(1.0 + (batch_index * 0.2), 2.0)
-                await asyncio.sleep(delay)
+
+                            return boss_kcs
+                        except Exception as e:
+                            print(f"Error processing boss {boss}: {str(e)}")
+                            return []
+
+                    boss_tasks.append(process_boss(boss_name))
+
+                # Run all boss tasks in this batch concurrently
+                batch_results = await asyncio.gather(*boss_tasks)
+
+                # Combine all results
+                for result in batch_results:
+                    all_kcs.extend(result)
+
+                # Small delay between batches to avoid API rate limits
+                await asyncio.sleep(0.5)
 
             # Find the top 10 KCs across all bosses
             all_kcs.sort(key=lambda x: -x['kills'])
@@ -1345,14 +1199,14 @@ class HighscoresBot(discord.Client):
                               'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 
                               'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 
                               'runecrafting', 'hunter', 'construction'] or view_type in [
-                              'barrows_chests', 'bryophyta', 'callisto', 
-                              'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
+                              'amoxliatl', 'barrows_chests', 'bryophyta', 'callisto', 
+                              'calvarion', 'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
                               'chaos_elemental', 'chaos_fanatic', 'commander_zilyana', 'corporeal_beast', 
-                              'crazy_archaeologist', 'deranged_archaeologist', 'giant_mole', 
-                              'kalphite_queen', 'king_black_dragon', 'kril_tsutsaroth', 
-                              'obor', 'sarachnis', 'scorpia', 'scurrius', 
-                              'tempoross', 'the_hueycoatl', 'the_royal_titans', 
-                              'venenatis', 'vetion', 'wintertodt']:
+                              'crazy_archaeologist', 'deranged_archaeologist', 'giant_mole', 'hespori', 
+                              'kalphite_queen', 'king_black_dragon', 'kril_tsutsaroth', 'lunar_chests', 
+                              'obor', 'sarachnis', 'scorpia', 'scurrius', 'skotizo', 'spindel', 
+                              'tempoross', 'the_hueycoatl', 'the_royal_titans', 'thermonuclear_smoke_devil', 
+                              'tztok_jad', 'venenatis', 'vetion', 'wintertodt']:
                 embed = await self.create_single_category_embed(view_type)
             else:
                 embed = await self.create_total_level_embed(group_name)  # Default to total level
@@ -1496,7 +1350,7 @@ async def on_ready():
                 else:
                     # Set proper timestamp for the embed
                     if isinstance(embed_or_error, discord.Embed):
-                        embed_or_error.timestamp = datetime.now()
+                        embed_or_error.timestamp = datetimenow()
                         # Store cache time in dictionary
                         if not hasattr(client, 'cache_times'):
                             client.cache_times = {}
@@ -1545,6 +1399,41 @@ async def on_ready():
         except Exception as e:
             await interaction.followup.send(f"Error refreshing highscores: {str(e)}", ephemeral=True)
             print(f"Error in refresh command: {str(e)}")
+
+    @client.tree.command(name="freshembed", description="Create a fresh highscores embed")
+    async def freshembed(interaction):
+        # Defer with ephemeral=True to only show loading to the user who triggered it
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        try:
+            # Send a quick ephemeral response to the user who triggered the command
+            await interaction.followup.send("Creating a fresh highscores embed...", ephemeral=True)
+
+            # Force refresh the cache first
+            embed_or_error = await client.update_highscores(force_refresh=True)
+
+            if isinstance(embed_or_error, str):
+                await interaction.followup.send(f"⚠️ {embed_or_error}", ephemeral=True)
+            else:
+                # Set proper timestamp for the embed
+                if isinstance(embed_or_error, discord.Embed):
+                    embed_or_error.timestamp = datetime.now()
+                    client.cached_embeds["total"] = embed_or_error
+
+                # Create a new view with the refreshed embeds
+                view = HighscoresView(client, client.cached_embeds)
+
+                # Send a new message to the channel
+                channel = interaction.channel
+                if channel:
+                    message = await channel.send("🔄 **Fresh Highscores**", embed=embed_or_error, view=view)
+                    client.last_message = message
+                    await interaction.followup.send("Fresh highscores embed created successfully!", ephemeral=True)
+                else:
+                    await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error creating fresh embed: {str(e)}", ephemeral=True)
+            print(f"Error in freshembed command: {str(e)}")
 
     # Sync the commands with Discord
     print("Syncing commands with Discord...")
@@ -1633,14 +1522,14 @@ async def push_fresh_embed():
                 if channel.permissions_for(guild.me).send_messages:
                     # Create a fresh embed
                     embed_or_error = await client.update_highscores(force_refresh=True)
-                    
+
                     if isinstance(embed_or_error, str):
                         await channel.send(f"⚠️ {embed_or_error}")
                     else:
                         # Set proper timestamp for the embed
                         if isinstance(embed_or_error, discord.Embed):
                             embed_or_error.timestamp = datetime.now()
-                            
+
                             # Create view with buttons
                             view = HighscoresView(client, client.cached_embeds)
                             message = await channel.send("🔄 **Fresh Highscores**", embed=embed_or_error, view=view)
@@ -1656,7 +1545,7 @@ async def push_fresh_embed():
 async def on_message(message):
     if message.author == client.user:
         return
-        
+
     if message.content.lower() == '!freshembed':
         await push_fresh_embed()
         try:
@@ -1756,7 +1645,7 @@ async def on_ready():
 
     # Preload categories in the background
     asyncio.create_task(preload_categories(client))
-    
+
     # Push a fresh embed to the channel
     await push_fresh_embed()
 
@@ -1844,13 +1733,50 @@ def setup_commands():
             await interaction.followup.send(f"Error refreshing highscores: {str(e)}", ephemeral=True)
             print(f"Error in refresh command: {str(e)}")
 
+    @client.tree.command(name="freshembed", description="Create a fresh highscores embed")
+    async def freshembed(interaction):
+        # Defer with ephemeral=True to only show loading to the user who triggered it
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        try:
+            # Send a quick ephemeral response to the user who triggered the command
+            await interaction.followup.send("Creating a fresh highscores embed...", ephemeral=True)
+
+            # Force refresh the cache first
+            embed_or_error = await client.update_highscores(force_refresh=True)
+
+            if isinstance(embed_or_error, str):
+                await interaction.followup.send(f"⚠️ {embed_or_error}", ephemeral=True)
+            else:
+                # Set proper timestamp for the embed
+                if isinstance(embed_or_error, discord.Embed):
+                    embed_or_error.timestamp = datetime.now()
+                    client.cached_embeds["total"] = embed_or_error
+
+                # Create a new view with the refreshed embeds
+                view = HighscoresView(client, client.cached_embeds)
+
+                # Send a new message to the channel
+                channel = interaction.channel
+                if channel:
+                    message = await channel.send("🔄 **Fresh Highscores**", embed=embed_or_error, view=view)
+                    client.last_message = message
+                    await interaction.followup.send("Fresh highscores embed created successfully!", ephemeral=True)
+                else:
+                    await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error creating fresh embed: {str(e)}", ephemeral=True)
+            print(f"Error in freshembed command: {str(e)}")
+
     # Sync the commands with Discord
     print("Syncing commands with Discord...")
     try:
         # Clear any existing commands first
         client.tree.clear_commands(guild=None)
+        # Register the commands to the tree
+
         # Sync the commands globally (may take up to an hour to propagate)
-        asyncio.create_task(client.tree.sync())
+        await client.tree.sync()
         print("Commands synced successfully!")
     except Exception as e:
         print(f"Error syncing commands: {str(e)}")
