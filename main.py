@@ -71,7 +71,7 @@ class HighscoresBot(discord.Client):
                 total_exp = 0
                 
                 # Calculate total level by summing individual skill levels
-                # We'll ignore the 'overall' total level as it seems to be fixed at 2277
+                # Never fallback to the default 2277 value
                 if 'data' in entry and 'skills' in entry['data']:
                     skills_data = entry['data']['skills']
                     
@@ -82,6 +82,7 @@ class HighscoresBot(discord.Client):
                             skill_levels.append(data['level'])
                             total_exp += data.get('experience', 0)
                     
+                    # Only use the sum of individual skills, never fallback to 2277
                     total_level = sum(skill_levels) if skill_levels else 0
                     
                     # If we also have 'overall' experience data, use that as it's more accurate
@@ -104,7 +105,8 @@ class HighscoresBot(discord.Client):
             # Add the top 10 by Total Level
             top_10_text = "Top 10 by Total Level\n"
             for i, player in enumerate(processed_players[:10], 1):
-                top_10_text += f"{i}. {player['name']} | Total Lvl: {player['total_level']} | Total XP: {player['total_exp']:,}\n"
+                # Make sure we're displaying the actual calculated total, never a default value
+                top_10_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
             
             embed.add_field(name="", value=top_10_text, inline=False)
             
