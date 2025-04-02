@@ -20,7 +20,7 @@ class HighscoresView(View):
         skills1_btn = Button(style=discord.ButtonStyle.primary, label="Skills 1", custom_id="skills1")
         skills2_btn = Button(style=discord.ButtonStyle.primary, label="Skills 2", custom_id="skills2")
         skills3_btn = Button(style=discord.ButtonStyle.primary, label="Skills 3", custom_id="skills3")
-        
+
         # Add button click handlers for skills and total
         total_btn.callback = self.total_callback
         skills1_btn.callback = self.skills1_callback
@@ -32,41 +32,41 @@ class HighscoresView(View):
         self.add_item(skills1_btn)
         self.add_item(skills2_btn)
         self.add_item(skills3_btn)
-        
+
         # Add boss buttons based on which categories have data
         self.add_boss_buttons()
-        
+
     def add_boss_buttons(self):
         # Create buttons for bosses based on which categories actually have data
         boss_buttons = []
-        
+
         # Always add Bosses 1 button (primary category)
         bosses1_btn = Button(style=discord.ButtonStyle.primary, label="Bosses 1", custom_id="bosses1")
         bosses1_btn.callback = self.bosses1_callback
         boss_buttons.append(bosses1_btn)
-        
+
         # Add buttons for the remaining boss categories if they have data
         # or if we don't know yet (on first load)
         if not hasattr(self.bot, 'boss_categories_with_data') or not self.bot.boss_categories_with_data or 2 in self.bot.boss_categories_with_data:
             bosses2_btn = Button(style=discord.ButtonStyle.primary, label="Bosses 2", custom_id="bosses2")
             bosses2_btn.callback = self.bosses2_callback
             boss_buttons.append(bosses2_btn)
-            
+
         if not hasattr(self.bot, 'boss_categories_with_data') or not self.bot.boss_categories_with_data or 3 in self.bot.boss_categories_with_data:
             bosses3_btn = Button(style=discord.ButtonStyle.primary, label="Bosses 3", custom_id="bosses3")
             bosses3_btn.callback = self.bosses3_callback
             boss_buttons.append(bosses3_btn)
-            
+
         if not hasattr(self.bot, 'boss_categories_with_data') or not self.bot.boss_categories_with_data or 4 in self.bot.boss_categories_with_data:
             bosses4_btn = Button(style=discord.ButtonStyle.primary, label="Bosses 4", custom_id="bosses4")
             bosses4_btn.callback = self.bosses4_callback
             boss_buttons.append(bosses4_btn)
-            
+
         if not hasattr(self.bot, 'boss_categories_with_data') or not self.bot.boss_categories_with_data or 5 in self.bot.boss_categories_with_data:
             bosses5_btn = Button(style=discord.ButtonStyle.primary, label="Bosses 5", custom_id="bosses5")
             bosses5_btn.callback = self.bosses5_callback
             boss_buttons.append(bosses5_btn)
-        
+
         # Add all boss buttons to the view
         for button in boss_buttons:
             self.add_item(button)
@@ -138,17 +138,27 @@ class HighscoresView(View):
             group_info = await self.bot.wom_client.get_group_details(self.bot.GROUP_ID)
             if group_info and 'name' in group_info:
                 group_name = group_info['name']
-                
+
             # Get boss data using the dynamic method
             embed, part = await self.bot.get_boss_embed(group_name, 1)
             self.cached_embeds[f"bosses{part}"] = embed
-            
+
             # Create a new view with updated boss buttons based on current data
             new_view = HighscoresView(self.bot, self.cached_embeds)
-            
+
             await interaction.message.edit(embed=embed, view=new_view)
+            # Create a mapping of part to range
+            part_ranges = {
+                1: "1-10",
+                2: "11-20",
+                3: "21-30",
+                4: "31-40",
+                5: "41-50"
+            }
+            range_text = part_ranges.get(part, f"{part}")
+
             # Send a follow-up message that's only visible to the user who clicked
-            await interaction.followup.send(f"Bosses {part} highscores updated!", ephemeral=True)
+            await interaction.followup.send(f"Bosses {range_text} highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for bosses1 button")
         except Exception as e:
@@ -164,17 +174,27 @@ class HighscoresView(View):
             group_info = await self.bot.wom_client.get_group_details(self.bot.GROUP_ID)
             if group_info and 'name' in group_info:
                 group_name = group_info['name']
-                
+
             # Get boss data using the dynamic method
             embed, part = await self.bot.get_boss_embed(group_name, 2)
             self.cached_embeds[f"bosses{part}"] = embed
-            
+
             # Create a new view with updated boss buttons based on current data
             new_view = HighscoresView(self.bot, self.cached_embeds)
-            
+
             await interaction.message.edit(embed=embed, view=new_view)
+            # Create a mapping of part to range
+            part_ranges = {
+                1: "1-10",
+                2: "11-20",
+                3: "21-30",
+                4: "31-40",
+                5: "41-50"
+            }
+            range_text = part_ranges.get(part, f"{part}")
+
             # Send a follow-up message that's only visible to the user who clicked
-            await interaction.followup.send(f"Bosses {part} highscores updated!", ephemeral=True)
+            await interaction.followup.send(f"Bosses {range_text} highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for bosses2 button")
         except Exception as e:
@@ -190,17 +210,27 @@ class HighscoresView(View):
             group_info = await self.bot.wom_client.get_group_details(self.bot.GROUP_ID)
             if group_info and 'name' in group_info:
                 group_name = group_info['name']
-                
+
             # Get boss data using the dynamic method
             embed, part = await self.bot.get_boss_embed(group_name, 3)
             self.cached_embeds[f"bosses{part}"] = embed
-            
+
             # Create a new view with updated boss buttons based on current data
             new_view = HighscoresView(self.bot, self.cached_embeds)
-            
+
             await interaction.message.edit(embed=embed, view=new_view)
+            # Create a mapping of part to range
+            part_ranges = {
+                1: "1-10",
+                2: "11-20",
+                3: "21-30",
+                4: "31-40",
+                5: "41-50"
+            }
+            range_text = part_ranges.get(part, f"{part}")
+
             # Send a follow-up message that's only visible to the user who clicked
-            await interaction.followup.send(f"Bosses {part} highscores updated!", ephemeral=True)
+            await interaction.followup.send(f"Bosses {range_text} highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for bosses3 button")
         except Exception as e:
@@ -216,17 +246,27 @@ class HighscoresView(View):
             group_info = await self.bot.wom_client.get_group_details(self.bot.GROUP_ID)
             if group_info and 'name' in group_info:
                 group_name = group_info['name']
-                
+
             # Get boss data using the dynamic method
             embed, part = await self.bot.get_boss_embed(group_name, 4)
             self.cached_embeds[f"bosses{part}"] = embed
-            
+
             # Create a new view with updated boss buttons based on current data
             new_view = HighscoresView(self.bot, self.cached_embeds)
-            
+
             await interaction.message.edit(embed=embed, view=new_view)
+            # Create a mapping of part to range
+            part_ranges = {
+                1: "1-10",
+                2: "11-20",
+                3: "21-30",
+                4: "31-40",
+                5: "41-50"
+            }
+            range_text = part_ranges.get(part, f"{part}")
+
             # Send a follow-up message that's only visible to the user who clicked
-            await interaction.followup.send(f"Bosses {part} highscores updated!", ephemeral=True)
+            await interaction.followup.send(f"Bosses {range_text} highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for bosses4 button")
         except Exception as e:
@@ -242,17 +282,27 @@ class HighscoresView(View):
             group_info = await self.bot.wom_client.get_group_details(self.bot.GROUP_ID)
             if group_info and 'name' in group_info:
                 group_name = group_info['name']
-                
+
             # Get boss data using the dynamic method
             embed, part = await self.bot.get_boss_embed(group_name, 5)
             self.cached_embeds[f"bosses{part}"] = embed
-            
+
             # Create a new view with updated boss buttons based on current data
             new_view = HighscoresView(self.bot, self.cached_embeds)
-            
+
             await interaction.message.edit(embed=embed, view=new_view)
+            # Create a mapping of part to range
+            part_ranges = {
+                1: "1-10",
+                2: "11-20",
+                3: "21-30",
+                4: "31-40",
+                5: "41-50"
+            }
+            range_text = part_ranges.get(part, f"{part}")
+
             # Send a follow-up message that's only visible to the user who clicked
-            await interaction.followup.send(f"Bosses {part} highscores updated!", ephemeral=True)
+            await interaction.followup.send(f"Bosses {range_text} highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for bosses5 button")
         except Exception as e:
@@ -545,10 +595,10 @@ class HighscoresBot(discord.Client):
             # Make sure we have exactly 10 entries for total level
             level_sorted = sorted(processed_players, key=lambda x: (-x['total_level'], -x['total_exp']))
             players_to_show = min(10, len(level_sorted))  # In case we have fewer than 10 valid players
-            
+
             for i, player in enumerate(level_sorted[:players_to_show], 1):
                 top_level_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
-            
+
             # Add placeholder entries if we have fewer than 10 players
             if players_to_show < 10:
                 for i in range(players_to_show + 1, 11):
@@ -562,10 +612,10 @@ class HighscoresBot(discord.Client):
             # Make sure we have exactly 10 entries for total experience
             exp_sorted = sorted(processed_players, key=lambda x: -x['total_exp'])
             players_to_show = min(10, len(exp_sorted))  # In case we have fewer than 10 valid players
-            
+
             for i, player in enumerate(exp_sorted[:players_to_show], 1):
                 top_exp_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
-                
+
             # Add placeholder entries if we have fewer than 10 players
             if players_to_show < 10:
                 for i in range(players_to_show + 1, 11):
@@ -809,7 +859,7 @@ class HighscoresBot(discord.Client):
 
         # Check if this boss category has any data
         has_any_data = False
-        
+
         # Add results to embed
         for boss_data in boss_results:
             if boss_data['has_data']:
@@ -823,11 +873,11 @@ class HighscoresBot(discord.Client):
             self.boss_categories_with_data.remove(part)
 
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
-        
+
         # If this category has no data, return None instead of the embed
         if not has_any_data:
             return None
-        
+
         return embed
 
     async def create_bosses_embed1(self, group_name):
@@ -844,23 +894,23 @@ class HighscoresBot(discord.Client):
 
     async def create_bosses_embed5(self, group_name):
         return await self.create_bosses_embed(group_name, part=5)
-    
+
     # New method to get boss embeds in the correct order based on available data
     async def get_boss_embed(self, group_name, requested_part):
         # First, check if the requested part has data
         embed = await self.create_bosses_embed(group_name, part=requested_part)
         if embed:
             return embed, requested_part
-        
+
         # If the requested part doesn't have data, find the next part that does
         for part in range(1, 6):
             if part == requested_part:
                 continue  # Skip the part we already checked
-                
+
             embed = await self.create_bosses_embed(group_name, part=part)
             if embed:
                 return embed, part
-                
+
         # If no parts have data, return a placeholder embed
         empty_embed = discord.Embed(
             title=f"{group_name} Highscores - Bosses",
@@ -899,7 +949,7 @@ class HighscoresBot(discord.Client):
                 try:
                     part = int(view_type[6:])
                     embed, actual_part = await self.get_boss_embed(group_name, part)
-                    
+
                     # Update the view_type to match the actual part we're showing
                     if actual_part > 0:
                         view_type = f"bosses{actual_part}"
