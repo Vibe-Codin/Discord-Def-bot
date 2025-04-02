@@ -6,7 +6,7 @@ import requests
 from datetime import datetime
 
 # Discord bot token
-TOKEN = ''  # You'll need to add your token
+TOKEN = ''  # Set this in your Replit secrets
 
 # WiseOldMan API client
 class WOMClient:
@@ -33,7 +33,7 @@ class HighscoresBot(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.wom_client = WOMClient()
-        self.GROUP_ID = 1  # Change to your OSRS Defence clan group ID
+        self.GROUP_ID = 1  # Change to your clan's group ID from Wise Old Man website
         self.last_message = None
 
     async def on_ready(self):
@@ -61,9 +61,9 @@ class HighscoresBot(discord.Client):
                 timestamp=datetime.now()
             )
             
-            # Add the top 10 by Total Level
-            top_10_text = "Top 10 by Total Level\n"
-            for i, entry in enumerate(overall_hiscores[:10], 1):
+            # Process all players to get total levels and experience
+            processed_players = []
+            for entry in overall_hiscores:
                 player_name = entry['player']['displayName']
                 
                 # Initialize variables
@@ -92,7 +92,19 @@ class HighscoresBot(discord.Client):
                 if total_exp == 0 and 'player' in entry and 'exp' in entry['player']:
                     total_exp = entry['player']['exp']
                 
-                top_10_text += f"{i}. {player_name} | Lvl: {total_level} | XP: {total_exp:,}\n"
+                processed_players.append({
+                    'name': player_name,
+                    'total_level': total_level,
+                    'total_exp': total_exp
+                })
+            
+            # Sort players first by total level (descending), then by total exp (descending) if levels are the same
+            processed_players.sort(key=lambda x: (x['total_level'], x['total_exp']), reverse=True)
+            
+            # Add the top 10 by Total Level
+            top_10_text = "Top 10 by Total Level\n"
+            for i, player in enumerate(processed_players[:10], 1):
+                top_10_text += f"{i}. {player['name']} | Total Lvl: {player['total_level']} | Total XP: {player['total_exp']:,}\n"
             
             embed.add_field(name="", value=top_10_text, inline=False)
             
