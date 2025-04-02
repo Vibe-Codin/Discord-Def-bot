@@ -39,7 +39,7 @@ async def fetch_clan_data():
             'Content-Type': 'application/json'
         }
         async with aiohttp.ClientSession() as session:
-            url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"  # Updated endpoint
+            url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats"  # Updated endpoint with stats
             print(f"Fetching clan data from: {url}")
             async with session.get(url, headers=headers) as resp:
                 if resp.status != 200:
