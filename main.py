@@ -1248,6 +1248,9 @@ async def on_ready():
                 if isinstance(embed_or_error, str):
                     await channel.send(f"⚠️ {embed_or_error}")
                 else:
+                    # Store timestamp as a float to avoid type issues
+                    embed_or_error._timestamp = time.time()
+
                     # Create view with buttons
                     view = HighscoresView(client, client.cached_embeds)
                     message = await channel.send(embed=embed_or_error, view=view)
