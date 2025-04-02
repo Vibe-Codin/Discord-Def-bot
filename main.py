@@ -1,4 +1,3 @@
-
 import discord
 from discord.ext import commands, tasks
 import aiohttp
@@ -42,32 +41,32 @@ async def fetch_clan_data():
             'Accept': 'application/json',
             'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
         }
-        
+
         # Try different API endpoints based on documentation
         # First, get the group details to verify we can access the correct clan
         group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"
         print(f"Fetching group details from: {group_endpoint}")
-        
+
         import requests
         try:
             # First try to use requests library directly to reduce any potential issues
             response = requests.get(group_endpoint, headers=headers, timeout=15)
             print(f"Group details response status: {response.status_code}")
-            
+
             if response.status_code == 200:
                 try:
                     group_data = response.json()
                     print(f"Group data: {json.dumps(group_data, indent=2)[:200]}...")
-                    
+
                     # If we got valid group data, now fetch members
                     if 'id' in group_data:
                         group_id = group_data['id']
                         print(f"Found group ID: {group_id}")
-                        
+
                         # Use the found group ID to fetch members
                         members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{group_id}/members"
                         print(f"Fetching members from: {members_endpoint}")
-                        
+
                         members_response = requests.get(members_endpoint, headers=headers, timeout=15)
                         if members_response.status_code == 200:
                             members_data = members_response.json()
@@ -77,7 +76,7 @@ async def fetch_clan_data():
                     print(f"Error decoding group JSON: {e}")
         except Exception as e:
             print(f"Error with direct request: {e}")
-        
+
         # If direct request failed, try aiohttp as fallback
         endpoints = [
             f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence",  # Get group details first
@@ -85,7 +84,7 @@ async def fetch_clan_data():
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members",  # Then get members
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/competitions" # Try competitions as a fallback
         ]
-        
+
         async with aiohttp.ClientSession() as session:
             for url in endpoints:
                 print(f"Trying endpoint: {url}")
@@ -93,22 +92,22 @@ async def fetch_clan_data():
                     async with session.get(url, headers=headers) as resp:
                         print(f"Response status: {resp.status}")
                         print(f"Response headers: {dict(resp.headers)}")
-                        
+
                         if resp.status == 404:
                             print(f"Endpoint not found: {url}")
                             continue
-                            
+
                         if resp.status != 200:
                             print(f"Error status: {resp.status}")
                             continue
-                            
+
                         text_data = await resp.text()
                         if not text_data:
                             print(f"Empty response from {url}")
                             continue
-                            
+
                         print(f"Got response from {url}: {text_data[:200]}")
-                        
+
                         try:
                             members_data = json.loads(text_data)
                             if members_data:
@@ -120,7 +119,7 @@ async def fetch_clan_data():
                 except Exception as e:
                     print(f"Error with endpoint {url}: {e}")
                     continue
-        
+
         # Fallback to direct HTTP request if aiohttp fails
         import requests
         print("Trying direct HTTP request...")
@@ -128,7 +127,7 @@ async def fetch_clan_data():
             try:
                 response = requests.get(url, headers=headers, timeout=10)
                 print(f"Direct request to {url}: status {response.status_code}")
-                
+
                 if response.status_code == 200 and response.text:
                     try:
                         data = response.json()
@@ -139,7 +138,7 @@ async def fetch_clan_data():
                         print(f"JSON parse error from direct request to {url}")
             except Exception as e:
                 print(f"Error with direct request to {url}: {e}")
-        
+
         print("All attempts to fetch clan data failed")
         return None
     except Exception as e:
@@ -150,7 +149,7 @@ def build_messages(clan_data):
     if not clan_data:
         print("No clan data received")
         return None, None, None
-        
+
     # Filter out users with offensive combat stats > 2
     filtered = []
     for player in clan_data:
@@ -165,14 +164,14 @@ def build_messages(clan_data):
                 break
         if valid:
             filtered.append(player)
-    
+
     # First message: Top 10 players by Total Level
     sorted_total = sorted(filtered, key=lambda x: (x.get("totalLevel", 0), x.get("totalXp", 0)), reverse=True)
     top_total = sorted_total[:10]
     msg1 = "**Top 10 by Total Level:**\n"
     for player in top_total:
         msg1 += f"- {player['username']} | Level: {player.get('totalLevel', 0)} | XP: {player.get('totalXp', 0)}\n"
-    
+
     # Second message: Top 10 per Skill
     msg2 = "**Top 10 per Skill:**\n"
     for skill in skills_list:
@@ -186,7 +185,7 @@ def build_messages(clan_data):
         for player in top_skill:
             skill_data = player.get("skills", {}).get(skill, {"level": 0, "xp": 0})
             msg2 += f"- {player['username']} | Level: {skill_data.get('level', 0)} | XP: {skill_data.get('xp', 0)}\n"
-    
+
     # Third message: Top 10 per Boss KC
     boss_set = set()
     for player in filtered:
@@ -194,7 +193,7 @@ def build_messages(clan_data):
         for boss in boss_data.keys():
             boss_set.add(boss)
     bosses_list = sorted(boss_set)
-    
+
     msg3 = "**Top 10 per Boss KC:**\n"
     for boss in bosses_list:
         msg3 += f"\n**{boss.title()}:**\n"
@@ -207,7 +206,7 @@ def build_messages(clan_data):
         for player in top_boss:
             kc = player.get("bosses", {}).get(boss, 0)
             msg3 += f"- {player['username']} | KC: {kc}\n"
-    
+
     return msg1, msg2, msg3
 
 @bot.tree.command(name="clanhighscores", description="Show clan highscores")
@@ -222,7 +221,7 @@ async def clanhighscores(interaction: discord.Interaction):
         if msg1 is None or msg2 is None or msg3 is None:
             await interaction.followup.send("Error processing clan data. Please try again later.")
             return
-        
+
         channel = interaction.channel
         if highscore_messages["msg1"] is None:
             highscore_messages["msg1"] = await channel.send(msg1)
@@ -245,12 +244,12 @@ async def update_highscores_task():
         if channel is None:
             print("Channel not found.")
             return
-            
+
         clan_data = await fetch_clan_data()
         if clan_data is None:
             print("Error fetching clan data in background task.")
             return
-            
+
         msg1, msg2, msg3 = build_messages(clan_data)
         if highscore_messages["msg1"] is None:
             highscore_messages["msg1"] = await channel.send(msg1)
@@ -276,28 +275,28 @@ async def testapi(interaction: discord.Interaction):
     try:
         # Try multiple methods to get API data
         test_results = []
-        
+
         # Try using the documented API endpoints more precisely
         headers = {
             'Accept': 'application/json',
             'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
         }
-        
+
         # Using documentation at https://docs.wiseoldman.net/
         endpoints = [
             # Try to get the group by name first
             f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence",
-            
+
             # Group endpoints
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",
-            
+
             # Member endpoints
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members", 
-            
+
             # Competition endpoints
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/competitions"
         ]
-        
+
         async with aiohttp.ClientSession() as session:
             for url in endpoints:
                 try:
@@ -316,7 +315,7 @@ async def testapi(interaction: discord.Interaction):
                             test_results.append(f"URL: {url}\nStatus: {status}\nHeaders: {json.dumps(resp_headers, indent=2)}\nResponse: {text[:200]} (Not valid JSON)\n\n")
                 except Exception as e:
                     test_results.append(f"URL: {url}\nError: {str(e)}\n\n")
-        
+
         # Method 2: Try direct HTTP request with better response handling
         import requests
         for url in endpoints:
@@ -324,7 +323,7 @@ async def testapi(interaction: discord.Interaction):
                 response = requests.get(url, headers=headers, timeout=15)
                 status_code = response.status_code
                 test_results.append(f"Direct request to {url}\nStatus: {status_code}")
-                
+
                 # Try to parse JSON if the response has content
                 if response.text and response.text.strip():
                     try:
@@ -332,7 +331,23 @@ async def testapi(interaction: discord.Interaction):
                         formatted_json = json.dumps(json_data, indent=2)[:500]
                         test_results.append(f"Response: {formatted_json}...\n\n")
                     except json.JSONDecodeError:
+                        test_results.append(f"Response: {response.text[:200]} (Not valid JSON)\n\n")
+                else:
+                    test_results.append(f"Response: Empty content\n\n")
+            except Exception as e:
+                test_results.append(f"Direct request to {url}\nError: {str(e)}\n\n")
 
+        # Send results
+        debug_info = "API Test Results:\n\n" + "\n".join(test_results)
+        if len(debug_info) > 2000:
+            # Split long messages
+            parts = [debug_info[i:i+1900] for i in range(0, len(debug_info), 1900)]
+            for i, part in enumerate(parts):
+                await interaction.followup.send(f"Part {i+1}/{len(parts)}:\n{part}")
+        else:
+            await interaction.followup.send(debug_info)
+    except Exception as e:
+        await interaction.followup.send(f"API Error: {str(e)}")
 
 @bot.tree.command(name="testgroup", description="Test fetching the group details from Wise Old Man API")
 async def testgroup(interaction: discord.Interaction):
@@ -343,15 +358,15 @@ async def testgroup(interaction: discord.Interaction):
             'Accept': 'application/json',
             'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
         }
-        
+
         # Try both name and ID methods
         group_urls = [
             f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence",
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
         ]
-        
+
         results = []
-        
+
         # Use requests for maximum compatibility
         import requests
         for url in group_urls:
@@ -359,21 +374,21 @@ async def testgroup(interaction: discord.Interaction):
                 response = requests.get(url, headers=headers, timeout=15)
                 status_code = response.status_code
                 results.append(f"URL: {url}\nStatus: {status_code}")
-                
+
                 if response.text and response.text.strip():
                     try:
                         json_data = response.json()
                         formatted_json = json.dumps(json_data, indent=2)
                         results.append(f"Response: {formatted_json}\n\n")
-                        
+
                         if 'id' in json_data:
                             group_id = json_data['id']
                             results.append(f"Found group ID: {group_id}")
-                            
+
                             # Try to get members for this group
                             members_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{group_id}/members"
                             members_response = requests.get(members_url, headers=headers, timeout=15)
-                            
+
                             if members_response.status_code == 200:
                                 members_data = members_response.json()
                                 member_count = len(members_data)
@@ -387,7 +402,7 @@ async def testgroup(interaction: discord.Interaction):
                     results.append(f"Response: Empty content\n\n")
             except Exception as e:
                 results.append(f"Error with {url}: {str(e)}\n\n")
-        
+
         # Send results
         debug_info = "Group Test Results:\n\n" + "\n".join(results)
         if len(debug_info) > 2000:
@@ -399,22 +414,6 @@ async def testgroup(interaction: discord.Interaction):
             await interaction.followup.send(debug_info)
     except Exception as e:
         await interaction.followup.send(f"Error in testgroup command: {str(e)}")
-                else:
-                    test_results.append(f"Response: Empty content\n\n")
-            except Exception as e:
-                test_results.append(f"Direct request to {url}\nError: {str(e)}\n\n")
-        
-        # Send results
-        debug_info = "API Test Results:\n\n" + "\n".join(test_results)
-        if len(debug_info) > 2000:
-            # Split long messages
-            parts = [debug_info[i:i+1900] for i in range(0, len(debug_info), 1900)]
-            for i, part in enumerate(parts):
-                await interaction.followup.send(f"Part {i+1}/{len(parts)}:\n{part}")
-        else:
-            await interaction.followup.send(debug_info)
-    except Exception as e:
-        await interaction.followup.send(f"API Error: {str(e)}")
 
 @bot.tree.command(name="testmembers", description="Test fetching clan members")
 async def testmembers(interaction: discord.Interaction):
