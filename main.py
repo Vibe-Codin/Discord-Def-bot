@@ -234,11 +234,11 @@ class WOMClient:
 
     async def _get_cached_or_fetch(self, cache_key, url, params=None, timeout=15):
         current_time = time.time()
-        
+
         # Check if we have a cached response and it's still valid
         if cache_key in self.cache and current_time < self.cache_expiry.get(cache_key, 0):
             return self.cache[cache_key]
-        
+
         # Make the API request
         try:
             response = self.session.get(url, params=params, timeout=timeout)
@@ -268,11 +268,11 @@ class WOMClient:
         try:
             cache_key = f"player_details_{username}"
             url = f"{self.base_url}/players/{username}"
-            
+
             data = await self._get_cached_or_fetch(cache_key, url, timeout=15)
             if data:
                 return data
-                
+
             # If we got here, something went wrong but was handled in _get_cached_or_fetch
             return None
         except Exception as e:
@@ -356,7 +356,7 @@ class HighscoresBot(discord.Client):
                 not player_details['latestSnapshot'] or 
                 'data' not in player_details['latestSnapshot'] or 
                 'skills' not in player_details['latestSnapshot']['data']):
-                
+
                 if DEBUG:
                     print(f"Player {player_name}: Missing required data fields, INCLUDING TEMPORARILY")
                 # Cache the result
@@ -420,59 +420,59 @@ class HighscoresBot(discord.Client):
         processed_players = []
         valid_player_count = 0
         excluded_count = 0
-        
+
         # Use a bounded semaphore to limit concurrent API calls
         # and process players in batches to avoid overwhelming the API
-        
+
         print(f"Processing {len(overall_hiscores)} players for total level highscores")
-        
+
         # Process players in batches to validate them
         batch_size = 10  # Process 10 players at a time
         batches = [overall_hiscores[i:i+batch_size] for i in range(0, len(overall_hiscores), batch_size)]
-        
+
         for batch in batches:
             # Create tasks for validating all players in the batch concurrently
             validation_tasks = []
             for entry in batch:
                 player_name = entry['player']['displayName']
                 validation_tasks.append(self.is_valid_player(player_name))
-                
+
             # Run all validation tasks concurrently
             validation_results = await asyncio.gather(*validation_tasks)
-            
+
             # Process the results
             for i, is_valid in enumerate(validation_results):
                 entry = batch[i]
                 player_name = entry['player']['displayName']
-                
+
                 if not is_valid:
                     print(f"FILTERED OUT: {player_name} - over combat skill limit or missing data")
                     excluded_count += 1
                     continue  # Skip this player
-                
+
                 valid_player_count += 1
-                
+
                 # Use the level field directly from the API for total level
                 total_level = 0
                 total_exp = 0
-                
+
                 # Get total level and exp from the API
                 if 'data' in entry:
                     if 'level' in entry['data']:
                         total_level = entry['data']['level']
                     if 'experience' in entry['data']:
                         total_exp = entry['data']['experience']
-                
+
                 # Fallback if we couldn't find it in the expected location
                 if total_level == 0 and 'player' in entry and 'exp' in entry['player']:
                     total_exp = entry['player']['exp']
-                
+
                 processed_players.append({
                     'name': player_name,
                     'total_level': total_level,
                     'total_exp': total_exp
                 })
-                
+
             # Small delay between batches to avoid rate limiting
             await asyncio.sleep(0.1)
 
@@ -530,11 +530,11 @@ class HighscoresBot(discord.Client):
         # Prepare skills embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Skills {part_range}",
-            description=f"Top 5 players in each skill for {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+            description=f"Top 10 players in each skill for {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
             color=0x3498db,
             timestamp=datetime.now()
         )
-        
+
         # Fetch all skill highscores concurrently to speed up processing
         async def process_skill(skill):
             skill_data = {
@@ -542,25 +542,25 @@ class HighscoresBot(discord.Client):
                 'text': "",
                 'inline': len(embed.fields) % 3 != 0
             }
-            
+
             skill_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=skill)
             if not skill_hiscores:
                 return skill_data
-                
+
             valid_count = 0
             processed_count = 0
             valid_entries = []
-            
+
             # First, concurrently validate the first batch of players
             max_to_check = min(15, len(skill_hiscores))  # Check first 15 players max
             batch = skill_hiscores[:max_to_check]
-            
+
             # Create validation tasks
             validation_tasks = []
             for entry in batch:
                 player_name = entry['player']['displayName']
                 validation_tasks.append((player_name, self.is_valid_player(player_name)))
-                
+
             # Process the results
             for player_name, validation_task in validation_tasks:
                 is_valid = await validation_task
@@ -569,17 +569,17 @@ class HighscoresBot(discord.Client):
                     for entry in batch:
                         if entry['player']['displayName'] == player_name:
                             valid_entries.append(entry)
-                            if len(valid_entries) >= 5:
+                            if len(valid_entries) >= 10:
                                 break
-                            
-            # Now process the valid entries to build the text
-            for i, entry in enumerate(valid_entries, 1):
+
+            # Now process the valid entries to build the text - limit to exactly 10 players
+            for i, entry in enumerate(valid_entries[:10], 1):
                 player_name = entry['player']['displayName']
-                
+
                 # For individual skills, get level and experience directly from the data object
                 skill_level = 0
                 exp = 0
-                
+
                 # The API returns this in a more straightforward way for individual skills
                 if 'data' in entry:
                     data = entry['data']
@@ -587,17 +587,18 @@ class HighscoresBot(discord.Client):
                         skill_level = data.get('level', 0)
                     if 'experience' in data:
                         exp = data.get('experience', 0)
-                
+
                 # Only include players who actually have levels in this skill
                 if exp > 0:
                     skill_data['text'] += f"{i}. {player_name} | Lvl: {skill_level} | XP: {exp:,}\n"
-            
+                    skill_data['has_data'] = True
+
             return skill_data
-            
+
         # Process all skills concurrently
         skill_tasks = [process_skill(skill) for skill in skills]
         skill_results = await asyncio.gather(*skill_tasks)
-        
+
         # Add all processed skills to the embed
         for skill_data in skill_results:
             if skill_data['text']:  # Only add field if there are players with levels
@@ -659,7 +660,7 @@ class HighscoresBot(discord.Client):
         # Prepare bosses embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Bosses {part_range}",
-            description=f"Top 5 players for each boss in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+            description=f"Top 10 players for each boss in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -673,21 +674,21 @@ class HighscoresBot(discord.Client):
                     'text': "",
                     'has_data': False
                 }
-                
+
                 boss_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=boss)
                 if not boss_hiscores:
                     return boss_data
-                
-                # Only check the first 15 players maximum to find 5 valid ones
+
+                # Only check the first 15 players maximum to find 10 valid ones
                 max_to_check = min(15, len(boss_hiscores))
                 batch = boss_hiscores[:max_to_check]
-                
+
                 # Create validation tasks
                 validation_tasks = []
                 for entry in batch:
                     player_name = entry['player']['displayName']
                     validation_tasks.append((player_name, entry, self.is_valid_player(player_name)))
-                
+
                 # Process results in order of completion
                 valid_entries = []
                 for player_name, entry, validation_task in validation_tasks:
@@ -697,18 +698,18 @@ class HighscoresBot(discord.Client):
                         kills = 0
                         if 'data' in entry and 'kills' in entry['data']:
                             kills = entry['data']['kills']
-                        
+
                         # Only include players who have kills for this boss
                         if kills > 0:
                             valid_entries.append((player_name, kills))
-                            if len(valid_entries) >= 5:
+                            if len(valid_entries) >= 10:
                                 break
-                
+
                 # Build the text for this boss
-                for i, (player_name, kills) in enumerate(valid_entries, 1):
+                for i, (player_name, kills) in enumerate(valid_entries[:10], 1):
                     boss_data['text'] += f"{i}. {player_name} | KC: {kills:,}\n"
                     boss_data['has_data'] = True
-                
+
                 return boss_data
             except Exception as e:
                 print(f"Error processing boss {boss}: {str(e)}")
@@ -717,7 +718,7 @@ class HighscoresBot(discord.Client):
                     'text': "",
                     'has_data': False
                 }
-        
+
         # Process all bosses concurrently with a semaphore to limit API calls
         async def process_all_bosses():
             tasks = []
@@ -726,9 +727,9 @@ class HighscoresBot(discord.Client):
                 async with self.api_semaphore:
                     tasks.append(process_boss(boss))
             return await asyncio.gather(*tasks)
-            
+
         boss_results = await process_all_bosses()
-        
+
         # Add results to embed
         for boss_data in boss_results:
             if boss_data['has_data']:
