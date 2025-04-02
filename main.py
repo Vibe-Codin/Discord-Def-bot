@@ -178,15 +178,14 @@ class WOMClient:
     async def get_player_details(self, username):
         try:
             url = f"{self.base_url}/players/{username}"
-            response = requests.get(url, timeout=10)  # Add timeout to prevent hanging
+            response = requests.get(url, timeout=15)  # Increased timeout
             
             if response.status_code == 200:
-                data = response.json()
-                # Check if data seems valid
-                if isinstance(data, dict) and 'data' in data:
-                    return data
-                else:
-                    print(f"Malformed API response for player {username}")
+                try:
+                    data = response.json()
+                    return data  # Return whatever we get, validation happens elsewhere
+                except ValueError:
+                    print(f"JSON parsing error for player {username}")
                     return None
             elif response.status_code == 404:
                 print(f"Player {username} not found in WiseOldMan (404)")
@@ -235,34 +234,51 @@ class HighscoresBot(discord.Client):
             player_details = None
             
             while retry_count < max_retries and player_details is None:
-                player_details = await self.wom_client.get_player_details(player_name)
-                if player_details is None:
+                try:
+                    # Directly request player stats from the API
+                    url = f"https://api.wiseoldman.net/v2/players/{player_name}"
+                    response = requests.get(url, timeout=10)
+                    
+                    if response.status_code == 200:
+                        player_details = response.json()
+                    else:
+                        print(f"API returned status code {response.status_code} for player {player_name}")
+                        retry_count += 1
+                        await asyncio.sleep(1)  # Wait before retry
+                except Exception as e:
+                    print(f"Request error for player {player_name}: {str(e)}")
                     retry_count += 1
-                    if DEBUG:
-                        print(f"Retry {retry_count}/{max_retries} for player {player_name}")
                     await asyncio.sleep(1)  # Wait before retry
             
-            # If we still couldn't get player details after retries, exclude them
+            # If we still couldn't get player details after retries, include them for now
+            # This is temporary to avoid filtering out too many players due to API issues
             if not player_details:
                 if DEBUG:
-                    print(f"Player {player_name}: Could not fetch details after {max_retries} retries, EXCLUDING")
-                return False
+                    print(f"Player {player_name}: Could not fetch details after {max_retries} retries, INCLUDING TEMPORARILY")
+                return True  # Include player if we can't fetch their details
             
-            # Check if player data and skills exist
-            if 'data' not in player_details:
+            # Now let's check if we have the skills data
+            if not player_details or 'latestSnapshot' not in player_details:
                 if DEBUG:
-                    print(f"Player {player_name}: No 'data' field in response, EXCLUDING")
-                return False
-                
-            if 'skills' not in player_details['data']:
+                    print(f"Player {player_name}: No 'latestSnapshot' field in response, INCLUDING TEMPORARILY")
+                return True
+            
+            snapshot = player_details['latestSnapshot']
+            if not snapshot or 'data' not in snapshot:
                 if DEBUG:
-                    print(f"Player {player_name}: No 'skills' field in player data, EXCLUDING")
-                return False
+                    print(f"Player {player_name}: No 'data' field in snapshot, INCLUDING TEMPORARILY")
+                return True
+            
+            data = snapshot['data']
+            if 'skills' not in data:
+                if DEBUG:
+                    print(f"Player {player_name}: No 'skills' field in data, INCLUDING TEMPORARILY")
+                return True
 
-            skills = player_details['data']['skills']
+            skills = data['skills']
             
             if DEBUG:
-                print(f"Player {player_name} skills data: {json.dumps(skills, indent=2)}")
+                print(f"Player {player_name} skills data retrieved successfully")
 
             # These are the skills we're checking (must be 2 or less)
             restricted_skills = ['attack', 'strength', 'magic', 'ranged']
@@ -271,16 +287,16 @@ class HighscoresBot(discord.Client):
             for skill_name in restricted_skills:
                 if skill_name not in skills:
                     if DEBUG:
-                        print(f"Player {player_name}: {skill_name.capitalize()} data missing, EXCLUDING")
-                    return False
+                        print(f"Player {player_name}: {skill_name.capitalize()} data missing, INCLUDING TEMPORARILY")
+                    return True  # Include player if we can't check their skills
                 
-                # Get the level for this skill
-                if 'level' not in skills[skill_name]:
+                skill_data = skills[skill_name]
+                if 'level' not in skill_data:
                     if DEBUG:
-                        print(f"Player {player_name}: {skill_name.capitalize()} level data missing, EXCLUDING")
-                    return False
+                        print(f"Player {player_name}: {skill_name.capitalize()} level data missing, INCLUDING TEMPORARILY")
+                    return True  # Include player if we can't check their level
                     
-                skill_level = skills[skill_name]['level']
+                skill_level = skill_data['level']
                 
                 # If level is more than 2, exclude the player
                 if skill_level > 2:
@@ -295,9 +311,9 @@ class HighscoresBot(discord.Client):
             
         except Exception as e:
             print(f"Error validating player {player_name}: {str(e)}")
-            # If there's an error, exclude them to be safe
-            print(f"Player {player_name}: Error during validation, EXCLUDING for safety")
-            return False
+            # If there's an error, include them temporarily to avoid filtering out too many players
+            print(f"Player {player_name}: Error during validation, INCLUDING TEMPORARILY")
+            return True
 
     async def create_total_level_embed(self, group_name):
         # Get overall hiscores for total level ranking
