@@ -37,50 +37,78 @@ highscore_messages = {
 
 async def fetch_clan_data():
     try:
+        # Try multiple approaches to get data
+        # Approach 1: Use aiohttp with different headers
         headers = {
             'Accept': 'application/json',
-            'User-Agent': 'Discord-Bot/1.0',
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Cache-Control': 'no-cache',
+            'Accept-Encoding': 'identity'  # Explicitly disable compression
         }
+        
+        # Try different API endpoints
+        endpoints = [
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members",  # Try base members endpoint first
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats",  # Then the stats endpoint
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence/members"  # Try by name as fallback
+        ]
+        
         async with aiohttp.ClientSession() as session:
-            # First fetch group members list
-            url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats"
-            print(f"Fetching group members from: {url}")
-            async with session.get(url, headers=headers) as resp:
-                print(f"Response status: {resp.status}")
-                print(f"Response headers: {dict(resp.headers)}")
-                
-                if resp.status == 404:
-                    print("Group not found. Please verify the group ID.")
-                    return None
-                if resp.status != 200:
-                    print(f"Error status: {resp.status}")
-                    error_text = await resp.text()
-                    print(f"Error response: {error_text}")
-                    return None
-                
-                content_type = resp.headers.get('Content-Type', '')
-                print(f"Content-Type: {content_type}")
-                
+            for url in endpoints:
+                print(f"Trying endpoint: {url}")
                 try:
-                    text_data = await resp.text()
-                    print(f"Raw response text: {text_data[:200]}")
-                    if not text_data:
-                        print("Empty response received")
-                        return None
+                    async with session.get(url, headers=headers) as resp:
+                        print(f"Response status: {resp.status}")
+                        print(f"Response headers: {dict(resp.headers)}")
                         
-                    members_data = json.loads(text_data) if text_data else None
-                    if not members_data:
-                        print("Empty members data received from API")
-                        return None
-                    return members_data
+                        if resp.status == 404:
+                            print(f"Endpoint not found: {url}")
+                            continue
+                            
+                        if resp.status != 200:
+                            print(f"Error status: {resp.status}")
+                            continue
+                            
+                        text_data = await resp.text()
+                        if not text_data:
+                            print(f"Empty response from {url}")
+                            continue
+                            
+                        print(f"Got response from {url}: {text_data[:200]}")
+                        
+                        try:
+                            members_data = json.loads(text_data)
+                            if members_data:
+                                print(f"Successfully parsed data from {url}")
+                                return members_data
+                        except json.JSONDecodeError as je:
+                            print(f"JSON parse error from {url}: {je}")
+                            continue
                 except Exception as e:
-                    print(f"Error parsing response: {e}")
-                    return None
+                    print(f"Error with endpoint {url}: {e}")
+                    continue
+        
+        # Fallback to direct HTTP request if aiohttp fails
+        import requests
+        print("Trying direct HTTP request...")
+        for url in endpoints:
+            try:
+                response = requests.get(url, headers=headers, timeout=10)
+                print(f"Direct request to {url}: status {response.status_code}")
                 
-                print(f"Successfully fetched data for {len(players)} members")
-                return players
+                if response.status_code == 200 and response.text:
+                    try:
+                        data = response.json()
+                        if data:
+                            print(f"Successfully parsed data from direct request to {url}")
+                            return data
+                    except json.JSONDecodeError:
+                        print(f"JSON parse error from direct request to {url}")
+            except Exception as e:
+                print(f"Error with direct request to {url}: {e}")
+        
+        print("All attempts to fetch clan data failed")
+        return None
     except Exception as e:
         print(f"Error fetching clan data: {str(e)}")
         return None
@@ -213,40 +241,52 @@ async def ping(ctx):
 async def testapi(interaction: discord.Interaction):
     await interaction.response.defer()
     try:
+        # Try multiple methods to get API data
+        test_results = []
+        
+        # Method 1: aiohttp with browser-like headers
         headers = {
             'Accept': 'application/json',
-            'User-Agent': 'OSRSDefenceBot/1.0',
-            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+            'Accept-Encoding': 'identity'  # Explicitly disable compression
         }
+        
+        # Try different endpoints
+        endpoints = [
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members",
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"
+        ]
+        
         async with aiohttp.ClientSession() as session:
-            # Test group endpoint
-            group_url = f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"
-            async with session.get(group_url, headers=headers) as resp:
-                group_text = await resp.text()
-                group_headers = dict(resp.headers)
-                group_status = resp.status
-                
-            # Test members stats endpoint
-            stats_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats"
-            async with session.get(stats_url, headers=headers) as resp:
-                stats_text = await resp.text()
-                stats_headers = dict(resp.headers)
-                stats_status = resp.status
-                
-            debug_info = (
-                f"Group Endpoint:\n"
-                f"URL: {group_url}\n"
-                f"Status: {group_status}\n"
-                f"Headers: {json.dumps(group_headers, indent=2)}\n"
-                f"Response: {group_text[:200]}\n\n"
-                f"Stats Endpoint:\n"
-                f"URL: {stats_url}\n"
-                f"Status: {stats_status}\n"
-                f"Headers: {json.dumps(stats_headers, indent=2)}\n"
-                f"Response: {stats_text[:200]}"
-            )
+            for url in endpoints:
+                try:
+                    async with session.get(url, headers=headers) as resp:
+                        status = resp.status
+                        resp_headers = dict(resp.headers)
+                        text = await resp.text()
+                        test_results.append(f"URL: {url}\nStatus: {status}\nHeaders: {json.dumps(resp_headers, indent=2)}\nResponse: {text[:200]}\n\n")
+                except Exception as e:
+                    test_results.append(f"URL: {url}\nError: {str(e)}\n\n")
+        
+        # Method 2: Try direct HTTP request 
+        import requests
+        for url in endpoints:
+            try:
+                response = requests.get(url, headers=headers, timeout=10)
+                test_results.append(f"Direct request to {url}\nStatus: {response.status_code}\nResponse: {response.text[:200]}\n\n")
+            except Exception as e:
+                test_results.append(f"Direct request to {url}\nError: {str(e)}\n\n")
+        
+        # Send results
+        debug_info = "API Test Results:\n\n" + "\n".join(test_results)
+        if len(debug_info) > 2000:
+            # Split long messages
+            parts = [debug_info[i:i+1900] for i in range(0, len(debug_info), 1900)]
+            for i, part in enumerate(parts):
+                await interaction.followup.send(f"Part {i+1}/{len(parts)}:\n{part}")
+        else:
             await interaction.followup.send(debug_info)
     except Exception as e:
         await interaction.followup.send(f"API Error: {str(e)}")
