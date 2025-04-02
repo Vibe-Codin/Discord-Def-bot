@@ -236,6 +236,19 @@ def build_messages(clan_data):
                 players.append(membership['player'])
         clan_data = players
         print(f"Extracted {len(players)} players from group data")
+        
+        # Debug: Check if players have skill data
+        if players and len(players) > 0:
+            sample_players = players[:3]  # Take first 3 players
+            for i, player in enumerate(sample_players):
+                print(f"Debug - Player {i+1} username: {player.get('username', 'Unknown')}")
+                if 'latestSnapshot' in player and player['latestSnapshot']:
+                    snapshot = player['latestSnapshot']
+                    if 'data' in snapshot and 'skills' in snapshot['data']:
+                        skills = snapshot['data']['skills']
+                        print(f"  Skills available: {list(skills.keys())[:5]}...")
+                    else:
+                        print("  No skills data found in player snapshot")
     # If we received a list but not of player objects, it might be just usernames
     elif isinstance(clan_data, list) and len(clan_data) > 0 and not isinstance(clan_data[0], dict):
         # Convert simple username list to dummy player objects
@@ -430,34 +443,97 @@ def build_messages(clan_data):
                 if exp > 0 or level > 0:
                     return (exp, level)
             
-            # Try to extract from different snapshot structures
+            # Normalize skill name (Wise Old Man API uses some variations)
+            normalized_skill = skill_name.lower().replace(' ', '_')
+            
+            # Check if player has latestSnapshot data
             if 'latestSnapshot' not in player or not player['latestSnapshot']:
                 return (exp, level)
                 
             snapshot = player['latestSnapshot']
-            # Try different paths to find skill data
-            if isinstance(snapshot, dict):
-                # Path 1: latestSnapshot.data.skills.{skill}
-                if 'data' in snapshot and isinstance(snapshot['data'], dict):
-                    data = snapshot['data']
-                    if 'skills' in data and isinstance(data['skills'], dict):
-                        skills = data['skills']
-                        if skill_name in skills and isinstance(skills[skill_name], dict):
-                            skill_data = skills[skill_name]
-                            exp = skill_data.get('experience', 0)
-                            level = skill_data.get('level', 0)
-                    # Path 2: latestSnapshot.data.{skill}
-                    elif skill_name in data and isinstance(data[skill_name], dict):
-                        skill_data = data[skill_name]
-                        exp = skill_data.get('experience', 0)
-                        level = skill_data.get('level', 0)
-                # Path 3: latestSnapshot.skills.{skill}
-                elif 'skills' in snapshot and isinstance(snapshot['skills'], dict):
-                    skills = snapshot['skills']
+            if not isinstance(snapshot, dict):
+                return (exp, level)
+                
+            # Try different data paths based on Wise Old Man API structure
+            
+            # Path 1: latestSnapshot.data.skills.{skill}
+            if 'data' in snapshot and isinstance(snapshot['data'], dict):
+                data = snapshot['data']
+                
+                # This is the most common path in WOM API v2
+                if 'skills' in data and isinstance(data['skills'], dict):
+                    skills = data['skills']
+                    
+                    # Try exact skill name first
                     if skill_name in skills and isinstance(skills[skill_name], dict):
                         skill_data = skills[skill_name]
                         exp = skill_data.get('experience', 0)
                         level = skill_data.get('level', 0)
+                    # Try normalized skill name
+                    elif normalized_skill in skills and isinstance(skills[normalized_skill], dict):
+                        skill_data = skills[normalized_skill]
+                        exp = skill_data.get('experience', 0)
+                        level = skill_data.get('level', 0)
+                    # Try both camelCase and snake_case variations
+                    else:
+                        # Check various formats that might be in the API
+                        potential_keys = [
+                            skill_name,
+                            normalized_skill,
+                            skill_name.replace('_', ''),
+                            skill_name.title().replace(' ', '')
+                        ]
+                        for key in potential_keys:
+                            if key in skills and isinstance(skills[key], dict):
+                                skill_data = skills[key]
+                                exp = skill_data.get('experience', 0) 
+                                level = skill_data.get('level', 0)
+                                if exp > 0 or level > 0:
+                                    break
+                
+                # Path 2: latestSnapshot.data.{skill} (direct skill in data)
+                if (exp == 0 and level == 0):
+                    # Check various possible formats of the skill name
+                    potential_keys = [
+                        skill_name,
+                        normalized_skill,
+                        skill_name.replace('_', ''),
+                        skill_name.title().replace(' ', '')
+                    ]
+                    for key in potential_keys:
+                        if key in data and isinstance(data[key], dict):
+                            skill_data = data[key]
+                            exp = skill_data.get('experience', 0)
+                            level = skill_data.get('level', 0)
+                            if exp > 0 or level > 0:
+                                break
+            
+            # Path 3: latestSnapshot.skills.{skill} (direct in snapshot)
+            if (exp == 0 and level == 0) and 'skills' in snapshot and isinstance(snapshot['skills'], dict):
+                skills = snapshot['skills']
+                potential_keys = [
+                    skill_name,
+                    normalized_skill,
+                    skill_name.replace('_', ''),
+                    skill_name.title().replace(' ', '')
+                ]
+                for key in potential_keys:
+                    if key in skills and isinstance(skills[key], dict):
+                        skill_data = skills[key]
+                        exp = skill_data.get('experience', 0)
+                        level = skill_data.get('level', 0)
+                        if exp > 0 or level > 0:
+                            break
+            
+            # If we have experience but no level, estimate level from exp
+            if exp > 0 and level == 0:
+                # Very basic level estimation for OSRS skills
+                if exp >= 13034431:  # Level 99 experience
+                    level = 99
+                elif exp > 1000000:  # High level
+                    level = 85 + int((exp - 1000000) / 1000000)
+                else:  # Lower levels
+                    level = min(99, max(1, int(exp/10000)))
             
             return (exp, level)
             
@@ -471,6 +547,7 @@ def build_messages(clan_data):
         top_skill = sorted_skill[:10]
         player_added = False
         
+        # Add detailed skill data from top players
         for player in top_skill:
             username = player.get('username', 'Unknown')
             display_name = player.get('displayName', username)
@@ -480,16 +557,38 @@ def build_messages(clan_data):
             if exp > 0 or level > 0:
                 msg2 += f"- {display_name} | Level: {level} | XP: {exp:,}\n"
                 player_added = True
-                
-        # Debug output for the first skill to understand data issues
-        if skill == skills_list[0] and not player_added:
+        
+        # Debug output for all skills to better understand data issues
+        if not player_added:
             if len(filtered) > 0:
+                print(f"Debug: No players found for {skill}.")
+                
+                # Try directly extracting first player's skill data to diagnose issues
                 sample_player = filtered[0]
-                print(f"Debug: No players found for {skill}. Sample player structure:")
-                if 'latestSnapshot' in sample_player:
+                if 'latestSnapshot' in sample_player and sample_player['latestSnapshot']:
                     snapshot = sample_player['latestSnapshot']
-                    if 'data' in snapshot and 'skills' in snapshot['data']:
-                        print(f"Skills found in player data: {list(snapshot['data']['skills'].keys())}")
+                    if isinstance(snapshot, dict) and 'data' in snapshot:
+                        data = snapshot['data']
+                        if 'skills' in data and isinstance(data['skills'], dict):
+                            skills_data = data['skills']
+                            print(f"Available skills: {list(skills_data.keys())}")
+                            
+                            # Try different formats of the skill name
+                            normalized_skill = skill.lower().replace(' ', '_')
+                            potential_keys = [
+                                skill,
+                                normalized_skill,
+                                skill.replace('_', ''),
+                                skill.title().replace(' ', '')
+                            ]
+                            
+                            found_keys = []
+                            for key in skills_data.keys():
+                                if any(pk.lower() in key.lower() for pk in potential_keys):
+                                    found_keys.append(key)
+                            
+                            if found_keys:
+                                print(f"Potential matching keys for '{skill}': {found_keys}")
         
         if not player_added:
             msg2 += "*No data available*\n"
