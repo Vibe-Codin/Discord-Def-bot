@@ -37,20 +37,19 @@ highscore_messages = {
 
 async def fetch_clan_data():
     try:
-        # Try multiple approaches to get data
-        # Approach 1: Use aiohttp with different headers
+        # Use headers according to API documentation
         headers = {
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Cache-Control': 'no-cache',
-            'Accept-Encoding': 'identity'  # Explicitly disable compression
+            'User-Agent': 'OSRS-Defence-Discord-Bot/1.0',
+            'Content-Type': 'application/json'
         }
         
-        # Try different API endpoints
+        # Try different API endpoints based on documentation
         endpoints = [
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members",  # Try base members endpoint first
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats",  # Then the stats endpoint
-            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence/members"  # Try by name as fallback
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores",  # Get group hiscores (includes all member stats)
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/gained",     # Try gained stats endpoint
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/statistics", # Try statistics endpoint
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence/hiscores"  # Try by name as fallback
         ]
         
         async with aiohttp.ClientSession() as session:
@@ -252,11 +251,12 @@ async def testapi(interaction: discord.Interaction):
             'Accept-Encoding': 'identity'  # Explicitly disable compression
         }
         
-        # Try different endpoints
+        # Try different endpoints based on API documentation
         endpoints = [
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members",
-            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",  # Group details
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores",  # Group hiscores
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members",  # Group members
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"  # Group by name
         ]
         
         async with aiohttp.ClientSession() as session:
@@ -266,7 +266,15 @@ async def testapi(interaction: discord.Interaction):
                         status = resp.status
                         resp_headers = dict(resp.headers)
                         text = await resp.text()
-                        test_results.append(f"URL: {url}\nStatus: {status}\nHeaders: {json.dumps(resp_headers, indent=2)}\nResponse: {text[:200]}\n\n")
+                        try:
+                            if text and text.strip():
+                                json_data = json.loads(text)
+                                formatted_json = json.dumps(json_data, indent=2)[:500]  # Limit to 500 chars
+                                test_results.append(f"URL: {url}\nStatus: {status}\nHeaders: {json.dumps(resp_headers, indent=2)}\nResponse: {formatted_json}...\n\n")
+                            else:
+                                test_results.append(f"URL: {url}\nStatus: {status}\nHeaders: {json.dumps(resp_headers, indent=2)}\nResponse: Empty response\n\n")
+                        except json.JSONDecodeError:
+                            test_results.append(f"URL: {url}\nStatus: {status}\nHeaders: {json.dumps(resp_headers, indent=2)}\nResponse: {text[:200]} (Not valid JSON)\n\n")
                 except Exception as e:
                     test_results.append(f"URL: {url}\nError: {str(e)}\n\n")
         
