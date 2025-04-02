@@ -10,31 +10,99 @@ import concurrent.futures
 
 # Custom View for Highscores dropdown menu
 class HighscoresView(View):
-    def __init__(self, bot, cached_embeds=None):
+    def __init__(self, bot, cached_embeds=None, active_category="skills"):
         super().__init__(timeout=None)  # No timeout for the view
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
+        self.active_category = active_category
         
-        # Create a dropdown menu
-        self.add_item(HighscoresDropdown(self.bot, self.cached_embeds))
+        # Add the Skills button
+        skills_button = discord.ui.Button(
+            style=discord.ButtonStyle.primary if active_category == "skills" else discord.ButtonStyle.secondary,
+            label="Skills",
+            custom_id="skills_button"
+        )
+        skills_button.callback = self.skills_button_callback
+        self.add_item(skills_button)
+        
+        # Add the Bosses button
+        bosses_button = discord.ui.Button(
+            style=discord.ButtonStyle.primary if active_category == "bosses" else discord.ButtonStyle.secondary,
+            label="Bosses",
+            custom_id="bosses_button"
+        )
+        bosses_button.callback = self.bosses_button_callback
+        self.add_item(bosses_button)
+        
+        # Add the appropriate dropdown based on active category
+        if active_category == "skills":
+            self.add_item(SkillsDropdown(self.bot, self.cached_embeds))
+        else:
+            self.add_item(BossesDropdown(self.bot, self.cached_embeds))
+    
+    async def skills_button_callback(self, interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        
+        # Create a new view with skills as active category
+        new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
+        
+        # Get the total (Overall) embed or use cached one
+        if "total" in self.cached_embeds and hasattr(self.cached_embeds["total"], "_timestamp"):
+            embed = self.cached_embeds["total"]
+            current_time = time.time()
+            cache_age = current_time - self.cached_embeds["total"]._timestamp
+            
+            if cache_age > 86400:  # If cache is older than 24 hours, refresh it
+                embed = await self.bot.update_highscores(view_type="total")
+                embed._timestamp = current_time
+                self.cached_embeds["total"] = embed
+        else:
+            embed = await self.bot.update_highscores(view_type="total")
+            embed._timestamp = time.time()
+            self.cached_embeds["total"] = embed
+        
+        await interaction.message.edit(embed=embed, view=new_view)
+        await interaction.followup.send("Switched to Skills category", ephemeral=True)
+    
+    async def bosses_button_callback(self, interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        
+        # Create a new view with bosses as active category
+        new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
+        
+        # Get a generic bosses overview embed or create one
+        bosses_overview_key = "bosses_overview"
+        
+        if bosses_overview_key in self.cached_embeds and hasattr(self.cached_embeds[bosses_overview_key], "_timestamp"):
+            embed = self.cached_embeds[bosses_overview_key]
+            current_time = time.time()
+            cache_age = current_time - self.cached_embeds[bosses_overview_key]._timestamp
+            
+            if cache_age > 86400:  # If cache is older than 24 hours, refresh it
+                embed = await self.bot.create_bosses_overview_embed()
+                embed._timestamp = current_time
+                self.cached_embeds[bosses_overview_key] = embed
+        else:
+            embed = await self.bot.create_bosses_overview_embed()
+            embed._timestamp = time.time()
+            self.cached_embeds[bosses_overview_key] = embed
+        
+        await interaction.message.edit(embed=embed, view=new_view)
+        await interaction.followup.send("Switched to Bosses category", ephemeral=True)
 
 # Dropdown menu for highscores selection
-class HighscoresDropdown(discord.ui.Select):
+class SkillsDropdown(discord.ui.Select):
     def __init__(self, bot, cached_embeds=None):
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
         
-        # Define core skills as options (most important for defence pure builds)
+        # Define all skill options
         options = [
             discord.SelectOption(label="Overall", value="total", description="Overall total level highscores"),
             discord.SelectOption(label="Defence", value="defence", description="Defence skill highscores"),
             discord.SelectOption(label="Hitpoints", value="hitpoints", description="Hitpoints skill highscores"),
             discord.SelectOption(label="Prayer", value="prayer", description="Prayer skill highscores"),
             discord.SelectOption(label="Slayer", value="slayer", description="Slayer skill highscores"),
-        ]
-        
-        # Add secondary skilling options
-        skilling_options = [
             discord.SelectOption(label="Cooking", value="cooking", description="Cooking skill highscores"),
             discord.SelectOption(label="Woodcutting", value="woodcutting", description="Woodcutting skill highscores"),
             discord.SelectOption(label="Fletching", value="fletching", description="Fletching skill highscores"),
@@ -42,30 +110,17 @@ class HighscoresDropdown(discord.ui.Select):
             discord.SelectOption(label="Firemaking", value="firemaking", description="Firemaking skill highscores"),
             discord.SelectOption(label="Crafting", value="crafting", description="Crafting skill highscores"),
             discord.SelectOption(label="Mining", value="mining", description="Mining skill highscores"),
+            discord.SelectOption(label="Smithing", value="smithing", description="Smithing skill highscores"),
+            discord.SelectOption(label="Herblore", value="herblore", description="Herblore skill highscores"),
+            discord.SelectOption(label="Agility", value="agility", description="Agility skill highscores"),
+            discord.SelectOption(label="Thieving", value="thieving", description="Thieving skill highscores"),
+            discord.SelectOption(label="Farming", value="farming", description="Farming skill highscores"),
+            discord.SelectOption(label="Runecrafting", value="runecrafting", description="Runecrafting skill highscores"),
+            discord.SelectOption(label="Hunter", value="hunter", description="Hunter skill highscores"),
+            discord.SelectOption(label="Construction", value="construction", description="Construction skill highscores"),
         ]
         
-        # Add important PvM boss options (increasing from 5 to 13)
-        boss_options = [
-            discord.SelectOption(label="Abyssal Sire", value="abyssal_sire", description="Abyssal Sire boss highscores"),
-            discord.SelectOption(label="Alchemical Hydra", value="alchemical_hydra", description="Alchemical Hydra boss highscores"),
-            discord.SelectOption(label="Chambers of Xeric", value="chambers_of_xeric", description="Chambers of Xeric boss highscores"),
-            discord.SelectOption(label="Theatre of Blood", value="theatre_of_blood", description="Theatre of Blood boss highscores"),
-            discord.SelectOption(label="Vorkath", value="vorkath", description="Vorkath boss highscores"),
-            discord.SelectOption(label="General Graardor", value="general_graardor", description="General Graardor boss highscores"),
-            discord.SelectOption(label="Zulrah", value="zulrah", description="Zulrah boss highscores"),
-            discord.SelectOption(label="Nex", value="nex", description="Nex boss highscores"),
-            discord.SelectOption(label="Nightmare", value="nightmare", description="Nightmare boss highscores"),
-            discord.SelectOption(label="Corrupted Gauntlet", value="the_corrupted_gauntlet", description="Corrupted Gauntlet highscores"),
-            discord.SelectOption(label="Tombs of Amascut", value="tombs_of_amascut", description="Tombs of Amascut highscores"),
-            discord.SelectOption(label="King Black Dragon", value="king_black_dragon", description="King Black Dragon highscores"),
-            discord.SelectOption(label="TzTok-Jad", value="tztok_jad", description="TzTok-Jad highscores"),
-        ]
-        
-        # Add all options to the list (staying under 25 limit)
-        options.extend(skilling_options)
-        options.extend(boss_options)
-        
-        super().__init__(placeholder="Select a highscore category...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="Select a skill category...", min_values=1, max_values=1, options=options)
         
     async def callback(self, interaction):
         try:
@@ -82,7 +137,7 @@ class HighscoresDropdown(discord.ui.Select):
             if cached_entry and hasattr(cached_entry, '_timestamp'):
                 cache_age = current_time - cached_entry._timestamp
                 
-            # Check if it's the overall total or a specific skill/boss
+            # Check if it's the overall total or a specific skill
             if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
                 embed = cached_entry
                 print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
@@ -91,13 +146,13 @@ class HighscoresDropdown(discord.ui.Select):
                 embed._timestamp = current_time  # Add timestamp to track age
                 self.cached_embeds["total"] = embed
             else:
-                # For specific skill or boss
+                # For specific skill
                 embed = await self.bot.create_single_category_embed(selected_value)
                 embed._timestamp = current_time  # Add timestamp to track age
                 self.cached_embeds[selected_value] = embed
             
             # Create a new HighscoresView with cached embeds to replace the existing view
-            new_view = HighscoresView(self.bot, self.cached_embeds)
+            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
             await interaction.message.edit(embed=embed, view=new_view)
             
             # Send a follow-up message that's only visible to the user who clicked
@@ -110,7 +165,97 @@ class HighscoresDropdown(discord.ui.Select):
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0]}")
         except Exception as e:
-            print(f"Error in dropdown callback: {str(e)}")
+            print(f"Error in skills dropdown callback: {str(e)}")
+            await interaction.followup.send(f"Error updating highscores: {str(e)}", ephemeral=True)
+
+class BossesDropdown(discord.ui.Select):
+    def __init__(self, bot, cached_embeds=None):
+        self.bot = bot
+        self.cached_embeds = cached_embeds or {}
+        
+        # Define all boss options - up to 25 maximum allowed by Discord
+        options = [
+            # Top-tier bosses (most important PvM content)
+            discord.SelectOption(label="Boss Overview", value="bosses_overview", description="Overview of top boss kills"),
+            discord.SelectOption(label="Abyssal Sire", value="abyssal_sire", description="Abyssal Sire boss highscores"),
+            discord.SelectOption(label="Alchemical Hydra", value="alchemical_hydra", description="Alchemical Hydra boss highscores"),
+            discord.SelectOption(label="Chambers of Xeric", value="chambers_of_xeric", description="Chambers of Xeric boss highscores"),
+            discord.SelectOption(label="Theatre of Blood", value="theatre_of_blood", description="Theatre of Blood boss highscores"),
+            discord.SelectOption(label="Tombs of Amascut", value="tombs_of_amascut", description="Tombs of Amascut highscores"),
+            discord.SelectOption(label="Vorkath", value="vorkath", description="Vorkath boss highscores"),
+            discord.SelectOption(label="Zulrah", value="zulrah", description="Zulrah boss highscores"),
+            discord.SelectOption(label="Nex", value="nex", description="Nex boss highscores"),
+            discord.SelectOption(label="Nightmare", value="nightmare", description="Nightmare boss highscores"),
+            discord.SelectOption(label="Corrupted Gauntlet", value="the_corrupted_gauntlet", description="Corrupted Gauntlet highscores"),
+            # God Wars Dungeon bosses
+            discord.SelectOption(label="General Graardor", value="general_graardor", description="General Graardor boss highscores"),
+            discord.SelectOption(label="Commander Zilyana", value="commander_zilyana", description="Commander Zilyana boss highscores"),
+            discord.SelectOption(label="Kree'arra", value="kreearra", description="Kree'arra boss highscores"),
+            discord.SelectOption(label="K'ril Tsutsaroth", value="kril_tsutsaroth", description="K'ril Tsutsaroth boss highscores"),
+            # Popular mid-tier bosses
+            discord.SelectOption(label="King Black Dragon", value="king_black_dragon", description="King Black Dragon highscores"),
+            discord.SelectOption(label="TzTok-Jad", value="tztok_jad", description="TzTok-Jad highscores"),
+            discord.SelectOption(label="Giant Mole", value="giant_mole", description="Giant Mole boss highscores"),
+            discord.SelectOption(label="Kalphite Queen", value="kalphite_queen", description="Kalphite Queen boss highscores"),
+            discord.SelectOption(label="Sarachnis", value="sarachnis", description="Sarachnis boss highscores"),
+            discord.SelectOption(label="Barrows Chests", value="barrows_chests", description="Barrows Chests highscores"),
+            discord.SelectOption(label="Dagannoth Kings", value="dagannoth_kings", description="All Dagannoth Kings combined"),
+            discord.SelectOption(label="Corporeal Beast", value="corporeal_beast", description="Corporeal Beast highscores"),
+            discord.SelectOption(label="TzKal-Zuk", value="tzkal_zuk", description="TzKal-Zuk (Inferno) highscores"),
+            discord.SelectOption(label="Vardorvis", value="vardorvis", description="Vardorvis highscores"),
+        ]
+        
+        super().__init__(placeholder="Select a boss category...", min_values=1, max_values=1, options=options)
+        
+    async def callback(self, interaction):
+        try:
+            # Use defer with ephemeral=True to show loading only to the user who clicked
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
+            selected_value = self.values[0]
+            current_time = time.time()
+            
+            # Check if we have a cached embed and if it's still valid (less than 24 hours old)
+            cached_entry = self.cached_embeds.get(selected_value, None)
+            cache_age = 0
+            
+            if cached_entry and hasattr(cached_entry, '_timestamp'):
+                cache_age = current_time - cached_entry._timestamp
+                
+            # For bosses overview or specific boss
+            if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+                embed = cached_entry
+                print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
+            elif selected_value == "bosses_overview":
+                embed = await self.bot.create_bosses_overview_embed()
+                embed._timestamp = current_time
+                self.cached_embeds["bosses_overview"] = embed
+            elif selected_value == "dagannoth_kings":
+                # Special case to combine all dagannoth kings
+                embed = await self.bot.create_dagannoth_kings_embed()
+                embed._timestamp = current_time
+                self.cached_embeds["dagannoth_kings"] = embed
+            else:
+                # For specific boss
+                embed = await self.bot.create_single_category_embed(selected_value)
+                embed._timestamp = current_time
+                self.cached_embeds[selected_value] = embed
+            
+            # Create a new HighscoresView with cached embeds to replace the existing view
+            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
+            await interaction.message.edit(embed=embed, view=new_view)
+            
+            # Send a follow-up message that's only visible to the user who clicked
+            category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
+            if cached_entry and cache_age < 86400:
+                time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
+                await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+            else:
+                await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+        except discord_errors.NotFound:
+            print(f"Interaction expired for {self.values[0]}")
+        except Exception as e:
+            print(f"Error in bosses dropdown callback: {str(e)}")
             await interaction.followup.send(f"Error updating highscores: {str(e)}", ephemeral=True)
 
 # Discord bot token
@@ -834,13 +979,21 @@ class HighscoresBot(discord.Client):
                 embed = await self.create_bosses_embed4(group_name)
             elif view_type == "bosses5":
                 embed = await self.create_bosses_embed5(group_name)
+            elif view_type == "bosses_overview":
+                embed = await self.create_bosses_overview_embed()
+            elif view_type == "dagannoth_kings":
+                embed = await self.create_dagannoth_kings_embed()
             # Check if it's a specific skill or boss
             elif view_type in ['defence', 'hitpoints', 'prayer', 'cooking', 'woodcutting', 
                               'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 
                               'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 
                               'runecrafting', 'hunter', 'construction'] or view_type in [
                               'abyssal_sire', 'alchemical_hydra', 'chambers_of_xeric', 
-                              'theatre_of_blood', 'vorkath']:
+                              'theatre_of_blood', 'vorkath', 'zulrah', 'nex', 'nightmare', 
+                              'the_corrupted_gauntlet', 'tombs_of_amascut', 'king_black_dragon', 
+                              'tztok_jad', 'general_graardor', 'commander_zilyana', 'kreearra', 
+                              'kril_tsutsaroth', 'giant_mole', 'kalphite_queen', 'sarachnis', 
+                              'barrows_chests', 'corporeal_beast', 'tzkal_zuk', 'vardorvis']:
                 embed = await self.create_single_category_embed(view_type)
             else:
                 embed = await self.create_total_level_embed(group_name)  # Default to total level
@@ -871,8 +1024,8 @@ class HighscoresBot(discord.Client):
                 await message.channel.send(f"⚠️ {embed_or_error}")
             else:
                 print("DEBUG: Successfully created embed, sending to channel")
-                # Create view with buttons and pass cached embeds
-                view = HighscoresView(self, self.cached_embeds)
+                # Create view with buttons and pass cached embeds - default to skills view
+                view = HighscoresView(self, self.cached_embeds, active_category="skills")
 
                 # Send a new message with the highscores and buttons
                 new_message = await message.channel.send(embed=embed_or_error, view=view)
@@ -904,8 +1057,22 @@ class HighscoresBot(discord.Client):
             else:
                 print("DEBUG: Successfully created embed, updating last message")
                 try:
-                    # Create view with buttons
-                    view = HighscoresView(self, self.cached_embeds)
+                    # Create view with buttons - preserve the active category if we can detect it from current view
+                    active_category = "skills"  # Default
+                    
+                    # Try to determine the current active category from the message
+                    if hasattr(self.last_message, "components") and self.last_message.components:
+                        for row in self.last_message.components:
+                            for component in row.children:
+                                if isinstance(component, discord.ui.Button):
+                                    if component.custom_id == "skills_button" and component.style == discord.ButtonStyle.primary:
+                                        active_category = "skills"
+                                        break
+                                    elif component.custom_id == "bosses_button" and component.style == discord.ButtonStyle.primary:
+                                        active_category = "bosses"
+                                        break
+                    
+                    view = HighscoresView(self, self.cached_embeds, active_category=active_category)
 
                     # Edit the last message instead of sending a new one
                     await self.last_message.edit(embed=embed_or_error, view=view)
@@ -915,7 +1082,7 @@ class HighscoresBot(discord.Client):
                     await message.channel.send("Error updating the message. Sending a new one instead.")
 
                     # Create view with buttons
-                    view = HighscoresView(self, self.cached_embeds)
+                    view = HighscoresView(self, self.cached_embeds, active_category="skills")
                     new_message = await message.channel.send(embed=embed_or_error, view=view)
                     self.last_message = new_message
 
@@ -963,6 +1130,15 @@ async def preload_categories(bot):
     total_embed._timestamp = current_time
     bot.cached_embeds["total"] = total_embed
     
+    # Preload bosses overview
+    try:
+        bosses_overview_embed = await bot.create_bosses_overview_embed()
+        bosses_overview_embed._timestamp = current_time
+        bot.cached_embeds["bosses_overview"] = bosses_overview_embed
+        print("Preloaded bosses overview")
+    except Exception as e:
+        print(f"Error preloading bosses overview: {str(e)}")
+    
     # List of important categories to preload
     categories = [
         "defence", "hitpoints", "prayer", "slayer",
@@ -984,3 +1160,209 @@ async def preload_categories(bot):
 
 # Run the bot
 client.run(TOKEN)
+async def create_bosses_overview_embed(self):
+    """Create an overview embed showing top boss kills for various bosses"""
+    try:
+        # Get group name
+        group_name = "OSRS Defence"  # Default name
+        group_info = await self.wom_client.get_group_details(self.GROUP_ID)
+        if group_info and 'name' in group_info:
+            group_name = group_info['name']
+        
+        # Create the overview embed
+        embed = discord.Embed(
+            title=f"{group_name} Highscores - Boss Overview",
+            description=f"Top boss killers in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+            color=0x3498db,
+            timestamp=datetime.now()
+        )
+        
+        # List of important bosses to include in the overview
+        important_bosses = [
+            "vorkath", "zulrah", "chambers_of_xeric", "theatre_of_blood", 
+            "tombs_of_amascut", "nex", "nightmare", "the_corrupted_gauntlet",
+            "alchemical_hydra", "abyssal_sire"
+        ]
+        
+        # Process each boss to find the player with the most kills
+        for boss_name in important_bosses:
+            try:
+                # Format boss name for display
+                display_name = ' '.join(word.capitalize() for word in boss_name.split('_'))
+                
+                # Get the highscores for this boss
+                boss_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=boss_name)
+                if not boss_hiscores:
+                    continue
+                
+                # Find valid players with the most kills
+                top_players = []
+                max_to_check = min(10, len(boss_hiscores))
+                
+                # Create validation tasks
+                validation_tasks = []
+                for entry in boss_hiscores[:max_to_check]:
+                    player_name = entry['player']['displayName']
+                    validation_tasks.append((entry, self.is_valid_player(player_name)))
+                
+                # Process results
+                for entry, validation_task in validation_tasks:
+                    is_valid = await validation_task
+                    if is_valid:
+                        player_name = entry['player']['displayName']
+                        
+                        if 'data' in entry and 'kills' in entry['data']:
+                            kills = entry['data']['kills']
+                            
+                            # Only include if they have kills for this boss
+                            if kills > 0:
+                                top_players.append({
+                                    'name': player_name,
+                                    'kills': kills
+                                })
+                
+                # If we found any valid players, add the top one to the embed
+                if top_players:
+                    # Sort by kills
+                    top_players.sort(key=lambda x: -x['kills'])
+                    
+                    # Take the top 3 if available
+                    top_3_text = ""
+                    for i, player in enumerate(top_players[:3], 1):
+                        top_3_text += f"{i}. {player['name']} - {player['kills']:,} KC\n"
+                    
+                    # Add to embed
+                    embed.add_field(
+                        name=display_name,
+                        value=top_3_text if top_3_text else "No valid players found",
+                        inline=True
+                    )
+            except Exception as e:
+                print(f"Error processing boss {boss_name} for overview: {str(e)}")
+        
+        # Add footer
+        embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
+        
+        return embed
+    except Exception as e:
+        print(f"Error creating boss overview embed: {str(e)}")
+        # Create an error embed
+        error_embed = discord.Embed(
+            title="Error",
+            description=f"An error occurred while creating the boss overview: {str(e)}",
+            color=0xFF0000
+        )
+        return error_embed
+
+async def create_dagannoth_kings_embed(self):
+    """Create an embed showing combined Dagannoth Kings information"""
+    try:
+        # Get group name
+        group_name = "OSRS Defence"  # Default name
+        group_info = await self.wom_client.get_group_details(self.GROUP_ID)
+        if group_info and 'name' in group_info:
+            group_name = group_info['name']
+        
+        # Create the embed
+        embed = discord.Embed(
+            title=f"{group_name} Highscores - Dagannoth Kings",
+            description=f"Top Dagannoth Kings killers in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+            color=0x3498db,
+            timestamp=datetime.now()
+        )
+        
+        # List of Dagannoth Kings
+        kings = [
+            "dagannoth_prime", "dagannoth_rex", "dagannoth_supreme"
+        ]
+        
+        # Combined player data across all kings
+        players_data = {}
+        
+        # Process each king
+        for king_name in kings:
+            # Get the highscores for this king
+            king_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=king_name)
+            if not king_hiscores:
+                continue
+            
+            # Process top players
+            max_to_check = min(20, len(king_hiscores))
+            
+            # Create validation tasks
+            validation_tasks = []
+            for entry in king_hiscores[:max_to_check]:
+                player_name = entry['player']['displayName']
+                validation_tasks.append((entry, self.is_valid_player(player_name)))
+            
+            # Process results
+            for entry, validation_task in validation_tasks:
+                is_valid = await validation_task
+                if is_valid:
+                    player_name = entry['player']['displayName']
+                    
+                    if 'data' in entry and 'kills' in entry['data']:
+                        kills = entry['data']['kills']
+                        
+                        # Only include if they have kills for this king
+                        if kills > 0:
+                            # Add or update player data
+                            if player_name not in players_data:
+                                players_data[player_name] = {
+                                    'total_kills': 0,
+                                    'kings': {}
+                                }
+                            
+                            # Add king-specific data
+                            king_display_name = ' '.join(word.capitalize() for word in king_name.split('_'))
+                            players_data[player_name]['kings'][king_display_name] = kills
+                            players_data[player_name]['total_kills'] += kills
+        
+        # Convert to list for sorting
+        players_list = [{'name': name, **data} for name, data in players_data.items()]
+        
+        # Sort by total kills
+        players_list.sort(key=lambda x: -x['total_kills'])
+        
+        # Add top 15 players to the embed
+        combined_text = ""
+        for i, player in enumerate(players_list[:15], 1):
+            kings_text = " | ".join(f"{king}: {kills}" for king, kills in player['kings'].items())
+            combined_text += f"{i}. {player['name']} - {player['total_kills']:,} total ({kings_text})\n"
+        
+        if combined_text:
+            embed.add_field(name="Top Dagannoth Kings Killers", value=combined_text, inline=False)
+        else:
+            embed.add_field(name="Top Dagannoth Kings Killers", value="No players found with Dagannoth Kings kills", inline=False)
+        
+        # Add individual top killers for each king
+        for king_name in kings:
+            display_name = ' '.join(word.capitalize() for word in king_name.split('_'))
+            
+            # Filter players who have kills for this specific king
+            king_players = [p for p in players_list if display_name in p['kings']]
+            
+            # Sort by kills for this specific king
+            king_players.sort(key=lambda x: -x['kings'].get(display_name, 0))
+            
+            # Create field text
+            king_text = ""
+            for i, player in enumerate(king_players[:5], 1):
+                king_text += f"{i}. {player['name']} - {player['kings'].get(display_name, 0):,} KC\n"
+            
+            if king_text:
+                embed.add_field(name=f"Top {display_name} Killers", value=king_text, inline=True)
+        
+        # Add footer
+        embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
+        
+        return embed
+    except Exception as e:
+        print(f"Error creating Dagannoth Kings embed: {str(e)}")
+        # Create an error embed
+        error_embed = discord.Embed(
+            title="Error",
+            description=f"An error occurred while creating the Dagannoth Kings highscores: {str(e)}",
+            color=0xFF0000
+        )
+        return error_embed
