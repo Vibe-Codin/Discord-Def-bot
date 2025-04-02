@@ -157,9 +157,13 @@ class SkillsDropdown(discord.ui.Select):
 
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
-            if cached_entry and cache_age < 86400:
-                time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
-                await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+            if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+                try:
+                    time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
+                    await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+                except Exception as e:
+                    print(f"Error sending followup for cached embed: {str(e)}")
+                    await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
             else:
                 await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
@@ -238,9 +242,13 @@ class BossesDropdown(discord.ui.Select):
 
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
-            if cached_entry and cache_age < 86400:
-                time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
-                await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+            if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+                try:
+                    time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
+                    await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+                except Exception as e:
+                    print(f"Error sending followup for cached embed: {str(e)}")
+                    await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
             else:
                 await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
