@@ -265,6 +265,13 @@ def build_messages(clan_data):
 
     # Filter out users with offensive combat stats > 2
     filtered = []
+    # Print sample player data to debug
+    if len(clan_data) > 0:
+        sample_player = clan_data[0]
+        print(f"Sample player data structure: {json.dumps(sample_player, indent=2)[:500]}")
+        if 'latestSnapshot' in sample_player:
+            print(f"Snapshot data sample: {json.dumps(sample_player['latestSnapshot'], indent=2)[:500]}")
+    
     for player in clan_data:
         if not isinstance(player, dict):
             print(f"Invalid player data format: {player}")
@@ -282,7 +289,7 @@ def build_messages(clan_data):
         valid = True
         for skill in offensive_skills:
             # Check if the skill data exists and get the level
-            if skill in skills_data:
+            if skills_data and skill in skills_data:
                 level = skills_data[skill].get('level', 0)
                 if level > 2:
                     valid = False
@@ -325,11 +332,13 @@ def build_messages(clan_data):
         msg2 += f"\n**{skill.title()}:**\n"
         
         # Sort players by skill experience
+        # Sort players by skill experience
         sorted_skill = sorted(
             filtered,
             key=lambda x: (
                 x.get('latestSnapshot', {}).get('data', {}).get('skills', {}).get(skill, {}).get('experience', 0) 
-                if isinstance(x.get('latestSnapshot', {}).get('data', {}).get('skills', {}), dict) else 0
+                if isinstance(x.get('latestSnapshot', {}).get('data', {}).get('skills', {}), dict) and 
+                skill in x.get('latestSnapshot', {}).get('data', {}).get('skills', {}) else 0
             ),
             reverse=True
         )
