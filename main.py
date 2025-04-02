@@ -201,20 +201,39 @@ async def ping(ctx):
 async def testapi(interaction: discord.Interaction):
     await interaction.response.defer()
     try:
-        headers = {'Accept': 'application/json', 'User-Agent': 'Discord-Bot/1.0'}
+        headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'Discord-Bot/1.0',
+            'Content-Type': 'application/json'
+        }
         async with aiohttp.ClientSession() as session:
             # Test group endpoint
             group_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
             async with session.get(group_url, headers=headers) as resp:
                 group_text = await resp.text()
+                group_headers = dict(resp.headers)
+                group_status = resp.status
                 
             # Test members stats endpoint
             stats_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats"
             async with session.get(stats_url, headers=headers) as resp:
                 stats_text = await resp.text()
+                stats_headers = dict(resp.headers)
+                stats_status = resp.status
                 
-            response = f"Group API Status: {resp.status}\nGroup Response: {group_text[:500]}\n\nStats API Status: {resp.status}\nStats Response: {stats_text[:500]}"
-            await interaction.followup.send(response)
+            debug_info = (
+                f"Group Endpoint:\n"
+                f"URL: {group_url}\n"
+                f"Status: {group_status}\n"
+                f"Headers: {json.dumps(group_headers, indent=2)}\n"
+                f"Response: {group_text[:200]}\n\n"
+                f"Stats Endpoint:\n"
+                f"URL: {stats_url}\n"
+                f"Status: {stats_status}\n"
+                f"Headers: {json.dumps(stats_headers, indent=2)}\n"
+                f"Response: {stats_text[:200]}"
+            )
+            await interaction.followup.send(debug_info)
     except Exception as e:
         await interaction.followup.send(f"API Error: {str(e)}")
 
