@@ -10,6 +10,9 @@ import random
 from datetime import datetime
 from discord import errors as discord_errors
 import concurrent.futures
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Custom View for Highscores dropdown menu
 class HighscoresView(View):
@@ -158,18 +161,25 @@ class SkillsDropdown(discord.ui.Select):
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
             try:
-                if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
-                    time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
-                    await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+                # Check if the interaction is still valid
+                if interaction.response and not interaction.is_expired():
+                    if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+                        time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
+                        await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+                    else:
+                        await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
                 else:
-                    await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+                    logger.warning(f"Interaction expired before followup could be sent for {category_name}")
+            except discord.errors.NotFound:
+                logger.warning(f"Interaction not found when sending followup for {category_name}")
             except Exception as e:
-                print(f"Error sending followup: {str(e)}")
+                logger.error(f"Error sending followup: {str(e)}")
                 # Try a simpler message as fallback
                 try:
-                    await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
+                    if not interaction.is_expired():
+                        await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
                 except:
-                    pass  # Silently ignore if even the fallback fails
+                    logger.error(f"Even fallback interaction failed for {category_name}")
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0]}")
         except Exception as e:
@@ -253,18 +263,25 @@ class BossesDropdown(discord.ui.Select):
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
             try:
-                if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
-                    time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
-                    await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+                # Check if the interaction is still valid
+                if interaction.response and not interaction.is_expired():
+                    if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+                        time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
+                        await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+                    else:
+                        await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
                 else:
-                    await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+                    logger.warning(f"Interaction expired before followup could be sent for {category_name}")
+            except discord.errors.NotFound:
+                logger.warning(f"Interaction not found when sending followup for {category_name}")
             except Exception as e:
-                print(f"Error sending followup: {str(e)}")
+                logger.error(f"Error sending followup: {str(e)}")
                 # Try a simpler message as fallback
                 try:
-                    await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
+                    if not interaction.is_expired():
+                        await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
                 except:
-                    pass  # Silently ignore if even the fallback fails
+                    logger.error(f"Even fallback interaction failed for {category_name}")
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0]}")
         except Exception as e:
@@ -284,6 +301,7 @@ class WOMClient:
         self.cache_expiry = {}  # Track when cache entries expire
         self.CACHE_DURATION = 86400  # Cache duration in seconds (24 hours)
         self.api_semaphore = asyncio.Semaphore(5) # Added semaphore here
+        self.user_agent = "Discord Highscores Bot (https://github.com/yourusername/yourrepo)" # Added User-Agent
 
     async def _get_cached_or_fetch(self, cache_key, url, params=None, timeout=15):
         current_time = time.time()
@@ -300,7 +318,8 @@ class WOMClient:
         while retry_count <= max_retries:
             try:
                 async with self.api_semaphore: # Acquire semaphore before making request
-                    response = self.session.get(url, params=params, timeout=timeout)
+                    headers = {'User-Agent': self.user_agent} #Added User-Agent to headers
+                    response = self.session.get(url, params=params, timeout=timeout, headers=headers)
 
                 if response.status_code == 200:
                     try:
@@ -434,6 +453,7 @@ class HighscoresBot(discord.Client):
             max_retries = 4  # Increased max retries
             player_details = None
             session = requests.Session()  # Use a session for better performance
+            session.headers.update({'User-Agent': 'Discord Highscores Bot (https://github.com/yourusername/yourrepo)'}) # Added User-Agent
 
             while retry_count < max_retries and player_details is None:
                 try:
@@ -1402,12 +1422,12 @@ async def on_ready():
     print("Syncing commands with Discord...")
     max_retries = 3
     retry_count = 0
-    
+
     while retry_count < max_retries:
         try:
             # Clear any existing commands first
             client.tree.clear_commands(guild=None)
-            
+
             # Explicitly ensure all commands are properly registered
             print("Registering commands...")
             client.tree.get_command("clanhighscores")
@@ -1415,11 +1435,11 @@ async def on_ready():
             client.tree.get_command("freshembed")
             client.tree.get_command("new")
             client.tree.get_command("refreshcache")
-            
+
             # Sync the commands globally (may take up to an hour to propagate)
             print("Syncing command tree...")
             await client.tree.sync()
-            
+
             print(f"Commands synced successfully! Commands in tree: {len(client.tree.get_commands())}")
             print(f"Available commands: {[cmd.name for cmd in client.tree.get_commands()]}")
             break
