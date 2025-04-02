@@ -399,8 +399,6 @@ async def testgroup(interaction: discord.Interaction):
             await interaction.followup.send(debug_info)
     except Exception as e:
         await interaction.followup.send(f"Error in testgroup command: {str(e)}")
-
-                        test_results.append(f"Response: {response.text[:200]} (Not valid JSON)\n\n")
                 else:
                     test_results.append(f"Response: Empty content\n\n")
             except Exception as e:
