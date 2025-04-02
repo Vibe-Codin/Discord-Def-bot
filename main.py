@@ -269,12 +269,11 @@ class BossesDropdown(discord.ui.Select):
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
 
-        # Define boss options - exactly 25 maximum allowed by Discord
+        # Define boss options - 25 maximum allowed by Discord, using 24 here
         options = [
             # Overview option
             discord.SelectOption(label="Boss Overview", value="bosses_overview", description="Overview of top boss kills"),
-            # Core bosses from the specified list - limited to fit within Discord's 25 option limit
-            discord.SelectOption(label="Barrows Chests", value="barrows_chests", description="Barrows Chests highscores"),
+            # The 24 specific bosses requested
             discord.SelectOption(label="Bryophyta", value="bryophyta", description="Bryophyta boss highscores"),
             discord.SelectOption(label="Callisto", value="callisto", description="Callisto boss highscores"),
             discord.SelectOption(label="Chambers of Xeric", value="chambers_of_xeric", description="Chambers of Xeric highscores"),
@@ -284,6 +283,7 @@ class BossesDropdown(discord.ui.Select):
             discord.SelectOption(label="Commander Zilyana", value="commander_zilyana", description="Commander Zilyana boss highscores"),
             discord.SelectOption(label="Corporeal Beast", value="corporeal_beast", description="Corporeal Beast highscores"),
             discord.SelectOption(label="Crazy Archaeologist", value="crazy_archaeologist", description="Crazy Archaeologist highscores"),
+            discord.SelectOption(label="Deranged Archaeologist", value="deranged_archaeologist", description="Deranged Archaeologist highscores"),
             discord.SelectOption(label="Giant Mole", value="giant_mole", description="Giant Mole boss highscores"),
             discord.SelectOption(label="Kalphite Queen", value="kalphite_queen", description="Kalphite Queen boss highscores"),
             discord.SelectOption(label="King Black Dragon", value="king_black_dragon", description="King Black Dragon highscores"),
@@ -1181,9 +1181,9 @@ class HighscoresBot(discord.Client):
                 timestamp=datetime.now()
             )
 
-            # All bosses to check - specific list of only supported bosses
+            # The 24 specific bosses to check as requested
             all_bosses = [
-                'barrows_chests', 'bryophyta', 'callisto', 'chambers_of_xeric', 
+                'bryophyta', 'callisto', 'chambers_of_xeric', 
                 'chambers_of_xeric_challenge_mode', 'chaos_elemental', 'chaos_fanatic', 
                 'commander_zilyana', 'corporeal_beast', 'crazy_archaeologist', 
                 'deranged_archaeologist', 'giant_mole', 'kalphite_queen', 'king_black_dragon', 
