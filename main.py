@@ -201,11 +201,20 @@ async def ping(ctx):
 async def testapi(interaction: discord.Interaction):
     await interaction.response.defer()
     try:
-        url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+        headers = {'Accept': 'application/json', 'User-Agent': 'Discord-Bot/1.0'}
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                text = await resp.text()
-                await interaction.followup.send(f"API Status: {resp.status}\nResponse: {text[:1000]}")
+            # Test group endpoint
+            group_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+            async with session.get(group_url, headers=headers) as resp:
+                group_text = await resp.text()
+                
+            # Test members stats endpoint
+            stats_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats"
+            async with session.get(stats_url, headers=headers) as resp:
+                stats_text = await resp.text()
+                
+            response = f"Group API Status: {resp.status}\nGroup Response: {group_text[:500]}\n\nStats API Status: {resp.status}\nStats Response: {stats_text[:500]}"
+            await interaction.followup.send(response)
     except Exception as e:
         await interaction.followup.send(f"API Error: {str(e)}")
 
