@@ -1,8 +1,45 @@
 import discord
+from discord.ui import View, Button
 import asyncio
 import json
 import requests
 from datetime import datetime
+
+# Custom View for Highscores buttons
+class HighscoresView(View):
+    def __init__(self, bot):
+        super().__init__(timeout=None)  # No timeout for the view
+        self.bot = bot
+        
+        # Add the three buttons
+        total_btn = Button(style=discord.ButtonStyle.primary, label="Total Level", custom_id="total")
+        skills_btn = Button(style=discord.ButtonStyle.primary, label="Skills", custom_id="skills")
+        bosses_btn = Button(style=discord.ButtonStyle.primary, label="Bosses", custom_id="bosses")
+        
+        # Add button click handlers
+        total_btn.callback = self.total_callback
+        skills_btn.callback = self.skills_callback
+        bosses_btn.callback = self.bosses_callback
+        
+        # Add buttons to the view
+        self.add_item(total_btn)
+        self.add_item(skills_btn)
+        self.add_item(bosses_btn)
+    
+    async def total_callback(self, interaction):
+        await interaction.response.defer()
+        embed = await self.bot.update_highscores(view_type="total")
+        await interaction.message.edit(embed=embed, view=self)
+    
+    async def skills_callback(self, interaction):
+        await interaction.response.defer()
+        embed = await self.bot.update_highscores(view_type="skills")
+        await interaction.message.edit(embed=embed, view=self)
+    
+    async def bosses_callback(self, interaction):
+        await interaction.response.defer()
+        embed = await self.bot.update_highscores(view_type="bosses")
+        await interaction.message.edit(embed=embed, view=self)
 
 # Discord bot token
 import os
@@ -243,8 +280,11 @@ class HighscoresBot(discord.Client):
                 await message.channel.send(f"⚠️ {embed_or_error}")
             else:
                 print("DEBUG: Successfully created embed, sending to channel")
-                # Send a new message with the highscores
-                new_message = await message.channel.send(embed=embed_or_error)
+                # Create view with buttons for switching between views
+                view = HighscoresView(self)
+                
+                # Send a new message with the highscores and buttons
+                new_message = await message.channel.send(embed=embed_or_error, view=view)
                 self.last_message = new_message
 
                 # Delete the processing message after sending the embed
@@ -272,13 +312,19 @@ class HighscoresBot(discord.Client):
             else:
                 print("DEBUG: Successfully created embed, updating last message")
                 try:
+                    # Create view with buttons
+                    view = HighscoresView(self)
+                    
                     # Edit the last message instead of sending a new one
-                    await self.last_message.edit(embed=embed_or_error)
+                    await self.last_message.edit(embed=embed_or_error, view=view)
                     await message.add_reaction("✅")  # Add a checkmark reaction to indicate success
                 except Exception as e:
                     print(f"DEBUG: Error updating message: {str(e)}")
                     await message.channel.send("Error updating the message. Sending a new one instead.")
-                    new_message = await message.channel.send(embed=embed_or_error)
+                    
+                    # Create view with buttons
+                    view = HighscoresView(self)
+                    new_message = await message.channel.send(embed=embed_or_error, view=view)
                     self.last_message = new_message
 
                 # Delete the processing message after updating
@@ -306,7 +352,9 @@ async def on_ready():
                 if isinstance(embed_or_error, str):
                     await channel.send(f"⚠️ {embed_or_error}")
                 else:
-                    message = await channel.send(embed=embed_or_error)
+                    # Create view with buttons
+                    view = HighscoresView(client)
+                    message = await channel.send(embed=embed_or_error, view=view)
                     client.last_message = message
                 break
         break
