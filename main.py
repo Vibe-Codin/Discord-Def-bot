@@ -1325,15 +1325,15 @@ class HighscoresBot(discord.Client):
                     pass
 
                 print("DEBUG: Message refreshed successfully")
-                
+
         elif message.content.lower() == '/refreshcache':
             # Refresh cache and create new embed
             processing_msg = await message.channel.send("Refreshing highscores cache and creating a new embed...")
             print(f"DEBUG: Received refreshcache command")
-            
+
             # Force refresh the cache
             embed_or_error = await self.update_highscores(message, force_refresh=True)
-            
+
             if isinstance(embed_or_error, str):
                 print(f"DEBUG: Error returned: {embed_or_error}")
                 await message.channel.send(f"⚠️ {embed_or_error}")
@@ -1341,51 +1341,51 @@ class HighscoresBot(discord.Client):
                 # Set timestamp
                 if isinstance(embed_or_error, discord.Embed):
                     embed_or_error.timestamp = datetime.now()
-                
+
                 # Create view with buttons
                 view = HighscoresView(self, self.cached_embeds, active_category="skills")
-                
+
                 # Send a new message with refreshed data
                 new_message = await message.channel.send(embed=embed_or_error, view=view)
                 self.last_message = new_message
-                
+
                 # Delete the processing message
                 try:
                     await processing_msg.delete()
                 except:
                     pass
-                
+
                 print("DEBUG: Cache refreshed and new embed created successfully")
-                
+
         elif message.content.lower() == '/new':
             # Create a new embed without refreshing cache
             processing_msg = await message.channel.send("Creating a new highscores embed without refreshing cache...")
             print(f"DEBUG: Received new embed command")
-            
+
             # Get embed from cache or create a new one without refreshing
             if "total" in self.cached_embeds:
                 embed = self.cached_embeds["total"]
                 embed.timestamp = datetime.now()
             else:
                 embed = await self.update_highscores(message, force_refresh=False)
-            
+
             if isinstance(embed, str):
                 print(f"DEBUG: Error returned: {embed}")
                 await message.channel.send(f"⚠️ {embed}")
             else:
                 # Create view with buttons
                 view = HighscoresView(self, self.cached_embeds, active_category="skills")
-                
+
                 # Send a new message
                 new_message = await message.channel.send(embed=embed, view=view)
                 self.last_message = new_message
-                
+
                 # Delete the processing message
                 try:
                     await processing_msg.delete()
                 except:
                     pass
-                
+
                 print("DEBUG: New embed created successfully without refreshing cache")
 
 intents = discord.Intents.default()
