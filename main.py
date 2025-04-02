@@ -181,22 +181,36 @@ class HighscoresView(View):
 
     async def skills2_callback(self, interaction):
         try:
-            # Use defer with ephemeral=True to show loading only to the user who clicked
-            await interaction.response.defer(ephemeral=True, thinking=True)
-
+            # Acknowledge the interaction immediately to prevent "Interaction Failed" errors
+            await interaction.response.defer(ephemeral=True)
+            
+            # Check if we have a cached version first for faster response
             if "skills2" in self.cached_embeds:
                 embed = self.cached_embeds["skills2"]
+                # Update the message with the cached embed
+                await interaction.message.edit(embed=embed, view=self)
+                await interaction.followup.send(f"Showing cached Skills {self.skill_categories[2]} highscores.", ephemeral=True)
             else:
+                # Let the user know we're fetching fresh data
+                await interaction.followup.send(f"Fetching Skills {self.skill_categories[2]} highscores data, please wait...", ephemeral=True)
+                
+                # Get the data (this might take some time)
                 embed = await self.bot.update_highscores(view_type="skills2")
-                self.cached_embeds["skills2"] = embed
-
-            await interaction.message.edit(embed=embed, view=self)
-            # Send a follow-up message that's only visible to the user who clicked
-            await interaction.followup.send("Skills 2 highscores updated!", ephemeral=True)
+                if embed:
+                    self.cached_embeds["skills2"] = embed
+                    # Update the message with the new embed
+                    await interaction.message.edit(embed=embed, view=self)
+                    await interaction.followup.send(f"Skills {self.skill_categories[2]} highscores updated!", ephemeral=True)
+                else:
+                    await interaction.followup.send("Failed to fetch skills highscores data.", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for skills2 button")
         except Exception as e:
             print(f"Error in skills2 callback: {str(e)}")
+            try:
+                await interaction.followup.send(f"An error occurred: {str(e)[:100]}...", ephemeral=True)
+            except:
+                pass
 
     async def bosses1_callback(self, interaction):
         try:
@@ -404,22 +418,36 @@ class HighscoresView(View):
 
     async def skills3_callback(self, interaction):
         try:
-            # Use defer with ephemeral=True to show loading only to the user who clicked
-            await interaction.response.defer(ephemeral=True, thinking=True)
-
+            # Acknowledge the interaction immediately to prevent "Interaction Failed" errors
+            await interaction.response.defer(ephemeral=True)
+            
+            # Check if we have a cached version first for faster response
             if "skills3" in self.cached_embeds:
                 embed = self.cached_embeds["skills3"]
+                # Update the message with the cached embed
+                await interaction.message.edit(embed=embed, view=self)
+                await interaction.followup.send(f"Showing cached Skills {self.skill_categories[3]} highscores.", ephemeral=True)
             else:
+                # Let the user know we're fetching fresh data
+                await interaction.followup.send(f"Fetching Skills {self.skill_categories[3]} highscores data, please wait...", ephemeral=True)
+                
+                # Get the data (this might take some time)
                 embed = await self.bot.update_highscores(view_type="skills3")
-                self.cached_embeds["skills3"] = embed
-
-            await interaction.message.edit(embed=embed, view=self)
-            # Send a follow-up message that's only visible to the user who clicked
-            await interaction.followup.send("Skills 3 highscores updated!", ephemeral=True)
+                if embed:
+                    self.cached_embeds["skills3"] = embed
+                    # Update the message with the new embed
+                    await interaction.message.edit(embed=embed, view=self)
+                    await interaction.followup.send(f"Skills {self.skill_categories[3]} highscores updated!", ephemeral=True)
+                else:
+                    await interaction.followup.send("Failed to fetch skills highscores data.", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for skills3 button")
         except Exception as e:
             print(f"Error in skills3 callback: {str(e)}")
+            try:
+                await interaction.followup.send(f"An error occurred: {str(e)[:100]}...", ephemeral=True)
+            except:
+                pass
 
 # Discord bot token
 import os
@@ -901,21 +929,26 @@ class HighscoresBot(discord.Client):
                 if not boss_hiscores:
                     return boss_data
 
-                # Only check the first 15 players maximum to find 10 valid ones
-                max_to_check = min(15, len(boss_hiscores))
+                # Only check the first 25 players maximum to find 10 valid ones
+                max_to_check = min(25, len(boss_hiscores))
                 batch = boss_hiscores[:max_to_check]
 
-                # Create validation tasks
+                # Create validation tasks for all players in the batch
                 validation_tasks = []
                 for entry in batch:
                     player_name = entry['player']['displayName']
-                    validation_tasks.append((player_name, entry, self.is_valid_player(player_name)))
+                    validation_tasks.append(self.is_valid_player(player_name))
 
-                # Process results in order of completion
+                # Run all validation tasks concurrently
+                validation_results = await asyncio.gather(*validation_tasks)
+
+                # Process the results
                 valid_entries = []
-                for player_name, entry, validation_task in validation_tasks:
-                    is_valid = await validation_task
+                for i, is_valid in enumerate(validation_results):
                     if is_valid:
+                        entry = batch[i]
+                        player_name = entry['player']['displayName']
+                        
                         # Get the kill count
                         kills = 0
                         if 'data' in entry and 'kills' in entry['data']:
@@ -955,11 +988,21 @@ class HighscoresBot(discord.Client):
         # Check if this boss category has any data
         has_any_data = False
 
-        # Add results to embed
+        # Add results to embed - even if there's only 1 boss with data
         for boss_data in boss_results:
             if boss_data['has_data']:
                 has_any_data = True
                 embed.add_field(name=boss_data['name'], value=boss_data['text'], inline=True)
+
+        # If no bosses have any data, add a placeholder message
+        if not has_any_data:
+            embed.add_field(
+                name="No Boss Data Available", 
+                value="No players meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged) have any boss kills in this category.", 
+                inline=False
+            )
+            # We still consider this category as having data (the placeholder)
+            has_any_data = True
 
         # Track which categories have data
         if has_any_data:
@@ -969,11 +1012,7 @@ class HighscoresBot(discord.Client):
 
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
 
-        # If this category has no data, return None instead of the embed
-        if not has_any_data:
-            return None
-
-        return embed
+        return embed  # Always return an embed, even if it just has the placeholder
 
     async def create_bosses_embed1(self, group_name):
         return await self.create_bosses_embed(group_name, part=1)
@@ -990,31 +1029,12 @@ class HighscoresBot(discord.Client):
     async def create_bosses_embed5(self, group_name):
         return await self.create_bosses_embed(group_name, part=5)
 
-    # New method to get boss embeds in the correct order based on available data
+    # Method to get boss embeds in the correct order based on available data
     async def get_boss_embed(self, group_name, requested_part):
         # First, check if the requested part has data
         embed = await self.create_bosses_embed(group_name, part=requested_part)
-        if embed:
-            return embed, requested_part
-
-        # If the requested part doesn't have data, find the next part that does
-        for part in range(1, 6):
-            if part == requested_part:
-                continue  # Skip the part we already checked
-
-            embed = await self.create_bosses_embed(group_name, part=part)
-            if embed:
-                return embed, part
-
-        # If no parts have data, return a placeholder embed
-        empty_embed = discord.Embed(
-            title=f"{group_name} Highscores - Bosses",
-            description="No boss data available for any players meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged).",
-            color=0x3498db,
-            timestamp=datetime.now()
-        )
-        empty_embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
-        return empty_embed, 0  # Return 0 as the part to indicate no valid parts
+        # We now always get an embed back, even if it just contains a placeholder message
+        return embed, requested_part
 
     async def update_highscores(self, message=None, view_type="total", force_refresh=False):
         try:
