@@ -65,9 +65,21 @@ class HighscoresBot(discord.Client):
             top_10_text = "Top 10 by Total Level\n"
             for i, entry in enumerate(overall_hiscores[:10], 1):
                 player_name = entry['player']['displayName']
-                # For total level, use the value directly from the API
-                total_level = entry['data'].get('level', 0)
+                # Get the experience value
                 exp = entry['data'].get('experience', 0)
+                
+                # Calculate total level by summing all skill levels
+                skill_levels = []
+                # Check if skills data is available
+                if 'skills' in entry['data']:
+                    # Get all skill levels except overall
+                    for skill, data in entry['data']['skills'].items():
+                        if skill != 'overall' and 'level' in data:
+                            skill_levels.append(data['level'])
+                
+                # Calculate the sum of all skill levels
+                total_level = sum(skill_levels) if skill_levels else 0
+                
                 top_10_text += f"{i}. {player_name} | Lvl: {total_level} | XP: {exp:,}\n"
             
             embed.add_field(name="", value=top_10_text, inline=False)
