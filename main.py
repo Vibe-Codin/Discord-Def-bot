@@ -345,46 +345,57 @@ def format_bosses_message(clan_data: List[Dict]) -> str:
 
 class RefreshButton(discord.ui.View):
     def __init__(self, bot_instance):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  # No timeout for persistent view
         self.bot = bot_instance
+        self.custom_id = "refresh_highscores"  # Adding custom ID for persistence
 
-    @discord.ui.button(label="Refresh Highscores", style=discord.ButtonStyle.primary, emoji="🔄")
+    @discord.ui.button(label="Refresh Highscores", style=discord.ButtonStyle.primary, emoji="🔄", custom_id="refresh_highscores_button")
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(thinking=True)
         try:
-            # First give immediate feedback
-            await interaction.followup.send("Refreshing highscores... this may take a moment.", ephemeral=True)
-
+            print(f"Refresh button clicked by {interaction.user}")
+            # Fetch new data
+            await interaction.followup.send("Refreshing highscores... Please wait a moment.", ephemeral=True)
+            
             clan_data = await fetch_clan_data()
             if not clan_data:
                 await interaction.followup.send("Error fetching clan data. Please try again later.", ephemeral=True)
                 return
 
+            # Create a new embed with updated data
             embed = create_highscores_embed(clan_data)
-
-            # Update the message with new data
-            message = highscore_messages.get("main")
-            if message:
-                try:
-                    await message.edit(embed=embed, view=RefreshButton(self.bot))
-                    # Use a new message to indicate success since the original might have expired
-                    try:
-                        await interaction.followup.send("✅ Highscores have been updated successfully!", ephemeral=True)
-                    except discord.errors.NotFound:
-                        # If the original interaction expired, we can't send a followup
-                        pass
-                except Exception as edit_error:
-                    print(f"Error editing message: {edit_error}")
-                    await interaction.channel.send("⚠️ Could not update the existing message. Here's a new highscores table:", embed=embed, view=RefreshButton(self.bot))
-            else:
-                await interaction.channel.send("Here's the latest highscores data:", embed=embed, view=RefreshButton(self.bot))
-        except Exception as e:
-            print(f"Error refreshing highscores: {e}")
+            
+            # Create a new view for the updated message
+            view = RefreshButton(self.bot)
+            
+            # Try to edit the original message
             try:
-                await interaction.followup.send(f"An error occurred while refreshing highscores: {str(e)}", ephemeral=True)
-            except discord.errors.NotFound:
-                # If the original interaction expired, we can't send a followup
-                pass
+                message = highscore_messages.get("main")
+                if message:
+                    await message.edit(embed=embed, view=view)
+                    highscore_messages["main"] = message  # Update the reference
+                    await interaction.followup.send("✅ Highscores updated successfully!", ephemeral=True)
+                else:
+                    # If we couldn't find the original message, send a new one
+                    channel = interaction.channel
+                    new_message = await channel.send(embed=embed, view=view)
+                    highscore_messages["main"] = new_message
+                    await interaction.followup.send("✅ Created new highscores message!", ephemeral=True)
+            except discord.NotFound:
+                # Original message was deleted, send a new one
+                channel = interaction.channel
+                new_message = await channel.send(embed=embed, view=view)
+                highscore_messages["main"] = new_message
+                await interaction.followup.send("Original message not found. Created a new highscores message!", ephemeral=True)
+            except Exception as edit_error:
+                print(f"Error updating message: {edit_error}")
+                # Send a new message if editing fails
+                channel = interaction.channel
+                new_message = await channel.send("⚠️ Could not update existing message. Here's the latest data:", embed=embed, view=view)
+                highscore_messages["main"] = new_message
+        except Exception as e:
+            print(f"Error in refresh button handler: {e}")
+            await interaction.followup.send(f"An error occurred: {str(e)}", ephemeral=True)
 
 def create_highscores_embed(clan_data):
     """Create a Discord embed with the clan highscores"""
@@ -396,25 +407,40 @@ def create_highscores_embed(clan_data):
 
     # Add top 10 by total level
     def get_total_level_and_exp(player: Dict) -> Tuple[int, int]:
-        if 'latestSnapshot' in player and player['latestSnapshot']:
-            data = player['latestSnapshot'].get('data', {})
-            skills = data.get('skills', {})
-            overall = skills.get('overall', {})
-            level = overall.get('level', 0)
-            exp = overall.get('experience', 0)
-            return (level, exp)
-        # Also try direct access to stats for hiscores entries
-        elif 'stats' in player:
-            stats = player.get('stats', {})
-            if 'overall' in stats:
-                overall = stats.get('overall', {})
+        try:
+            # Try to get data from latestSnapshot
+            if 'latestSnapshot' in player and player['latestSnapshot']:
+                data = player['latestSnapshot'].get('data', {})
+                skills = data.get('skills', {})
+                overall = skills.get('overall', {})
                 level = overall.get('level', 0)
                 exp = overall.get('experience', 0)
                 return (level, exp)
-        # Debug what kind of data structure we're receiving
-        print(f"Player data structure example: {str(player)[:300]}...")
+            
+            # Try to get from stats directly
+            elif 'stats' in player:
+                stats = player.get('stats', {})
+                if 'overall' in stats:
+                    overall = stats.get('overall', {})
+                    level = overall.get('level', 0)
+                    exp = overall.get('experience', 0)
+                    return (level, exp)
+                
+            # Try to get from exp field directly
+            elif 'exp' in player:
+                # If player has exp field but no level info, estimate level from total XP
+                exp = player.get('exp', 0)
+                # We don't have the level directly, so use the total exp as sorting criteria
+                return (2277 if exp > 200000000 else int(exp / 100000), exp)
+                
+            else:
+                print(f"Failed to find level and exp for player: {player.get('username', 'Unknown')}")
+        except Exception as e:
+            print(f"Error extracting data for {player.get('username', 'Unknown')}: {e}")
+        
         return (0, 0)
 
+    # Sort players by total level and exp
     sorted_players = sorted(
         clan_data, 
         key=get_total_level_and_exp,
@@ -432,6 +458,47 @@ def create_highscores_embed(clan_data):
         top_level_text += f"**{index}.** {display_name} | Lvl: {level} | XP: {exp:,}\n"
 
     embed.add_field(name="Top 10 by Total Level", value=top_level_text or "No data available", inline=False)
+    
+    # Add top skills section
+    # Just include a few key skills to keep embed size manageable
+    key_skills = ["attack", "defence", "strength", "hitpoints", "ranged", "magic"]
+    
+    for skill in key_skills:
+        # Define a function to get skill level and experience
+        def get_skill_data(player: Dict) -> Tuple[int, int]:
+            try:
+                if 'latestSnapshot' in player and player['latestSnapshot']:
+                    data = player['latestSnapshot'].get('data', {})
+                    skills = data.get('skills', {})
+                    skill_data = skills.get(skill, {})
+                    level = skill_data.get('level', 0)
+                    exp = skill_data.get('experience', 0)
+                    return (level, exp)
+                elif 'stats' in player and skill in player.get('stats', {}):
+                    skill_data = player['stats'].get(skill, {})
+                    level = skill_data.get('level', 0)
+                    exp = skill_data.get('experience', 0)
+                    return (level, exp)
+            except Exception as e:
+                print(f"Error getting {skill} data for {player.get('username', 'Unknown')}: {e}")
+            return (0, 0)
+
+        # Sort players by skill level, then by experience
+        skill_sorted = sorted(
+            clan_data,
+            key=lambda p: (get_skill_data(p)[0], get_skill_data(p)[1]),
+            reverse=True
+        )[:3]  # Just top 3 to keep embed manageable
+        
+        skill_text = ""
+        for player in skill_sorted:
+            display_name = player.get('displayName', player.get('username', 'Unknown'))
+            level, exp = get_skill_data(player)
+            if level > 0:
+                skill_text += f"{display_name} ({level}) "
+        
+        if skill_text:
+            embed.add_field(name=skill.title(), value=skill_text, inline=True)
 
     # Add timestamp and footer
     embed.timestamp = discord.utils.utcnow()
@@ -504,9 +571,18 @@ async def on_ready():
     try:
         await bot.tree.sync()
         print("Successfully synced application commands")
+        
+        # Register the persistent view for the refresh button
+        bot.add_view(RefreshButton(bot))
+        print("Registered persistent view for refresh button")
+        
+        # Start the automatic update task
+        if not update_highscores_task.is_running():
+            update_highscores_task.start()
+            print("Started highscores update task")
     except Exception as e:
-        print(f"Failed to sync commands: {e}")
-    update_highscores_task.start()
+        print(f"Error during startup: {e}")
+    
     print("Bot is ready! Try !ping to test or /clanhighscores to view OSRS clan highscores")
 
 if __name__ == "__main__":
