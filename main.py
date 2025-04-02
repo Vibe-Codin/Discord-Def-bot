@@ -302,11 +302,19 @@ class WOMClient:
                     response = self.session.get(url, params=params, timeout=timeout)
 
                 if response.status_code == 200:
-                    data = response.json()
-                    # Cache the successful response
-                    self.cache[cache_key] = data
-                    self.cache_expiry[cache_key] = current_time + self.CACHE_DURATION
-                    return data
+                    try:
+                        data = response.json()
+                        # Cache the successful response
+                        self.cache[cache_key] = data
+                        self.cache_expiry[cache_key] = current_time + self.CACHE_DURATION
+                        return data
+                    except ValueError as json_error:
+                        print(f"JSON parsing error for {url}: {str(json_error)}")
+                        # If we can't parse JSON but have cached data, return that
+                        if cache_key in self.cache:
+                            print(f"Using older cached data for {cache_key} after JSON parse error")
+                            return self.cache[cache_key]
+                        return None
                 elif response.status_code == 429:
                     # Rate limited - implement exponential backoff with jitter
                     base_wait_time = 2.0 * (2 ** retry_count)  # 2, 4, 8, 16, 32 seconds
@@ -321,6 +329,17 @@ class WOMClient:
                     # Check if we have cached data we can use instead
                     if cache_key in self.cache:
                         print(f"Using older cached data for {cache_key} as fallback")
+                        return self.cache[cache_key]
+                    return None
+            except requests.exceptions.Timeout:
+                print(f"Request timeout for {url}, attempt {retry_count+1}/{max_retries+1}")
+                retry_count += 1
+                if retry_count <= max_retries:
+                    await asyncio.sleep(2.0)  # Increased wait time
+                else:
+                    # Check if we have cached data we can use instead
+                    if cache_key in self.cache:
+                        print(f"Using older cached data for {cache_key} as fallback after timeout")
                         return self.cache[cache_key]
                     return None
             except Exception as e:
@@ -627,7 +646,7 @@ class HighscoresBot(discord.Client):
         all_skills = [
             'defence', 'hitpoints', 'prayer', 
             'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting',
-            'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',<replit_final_file>
+            'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',
             'farming', 'runecrafting', 'hunter', 'construction'
         ]
 
@@ -1306,6 +1325,68 @@ class HighscoresBot(discord.Client):
                     pass
 
                 print("DEBUG: Message refreshed successfully")
+                
+        elif message.content.lower() == '/refreshcache':
+            # Refresh cache and create new embed
+            processing_msg = await message.channel.send("Refreshing highscores cache and creating a new embed...")
+            print(f"DEBUG: Received refreshcache command")
+            
+            # Force refresh the cache
+            embed_or_error = await self.update_highscores(message, force_refresh=True)
+            
+            if isinstance(embed_or_error, str):
+                print(f"DEBUG: Error returned: {embed_or_error}")
+                await message.channel.send(f"⚠️ {embed_or_error}")
+            else:
+                # Set timestamp
+                if isinstance(embed_or_error, discord.Embed):
+                    embed_or_error.timestamp = datetime.now()
+                
+                # Create view with buttons
+                view = HighscoresView(self, self.cached_embeds, active_category="skills")
+                
+                # Send a new message with refreshed data
+                new_message = await message.channel.send(embed=embed_or_error, view=view)
+                self.last_message = new_message
+                
+                # Delete the processing message
+                try:
+                    await processing_msg.delete()
+                except:
+                    pass
+                
+                print("DEBUG: Cache refreshed and new embed created successfully")
+                
+        elif message.content.lower() == '/new':
+            # Create a new embed without refreshing cache
+            processing_msg = await message.channel.send("Creating a new highscores embed without refreshing cache...")
+            print(f"DEBUG: Received new embed command")
+            
+            # Get embed from cache or create a new one without refreshing
+            if "total" in self.cached_embeds:
+                embed = self.cached_embeds["total"]
+                embed.timestamp = datetime.now()
+            else:
+                embed = await self.update_highscores(message, force_refresh=False)
+            
+            if isinstance(embed, str):
+                print(f"DEBUG: Error returned: {embed}")
+                await message.channel.send(f"⚠️ {embed}")
+            else:
+                # Create view with buttons
+                view = HighscoresView(self, self.cached_embeds, active_category="skills")
+                
+                # Send a new message
+                new_message = await message.channel.send(embed=embed, view=view)
+                self.last_message = new_message
+                
+                # Delete the processing message
+                try:
+                    await processing_msg.delete()
+                except:
+                    pass
+                
+                print("DEBUG: New embed created successfully without refreshing cache")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -1316,16 +1397,16 @@ client = HighscoresBot(intents=intents)
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
 
-    # Sync commands with Discord - REMOVED
-    #print("Syncing commands with Discord...")
-    #try:
-    #    # Clear any existing commands first
-    #    client.tree.clear_commands(guild=None)
-    #    # Sync the commands globally (may take up to an hour to propagate)
-    #    await client.tree.sync()
-    #    print("Commands synced successfully!")
-    #except Exception as e:
-    #    print(f"Error syncing commands: {str(e)}")
+    # Sync commands with Discord - Re-enabled to fix missing slash commands
+    print("Syncing commands with Discord...")
+    try:
+        # Clear any existing commands first
+        client.tree.clear_commands(guild=None)
+        # Sync the commands globally (may take up to an hour to propagate)
+        await client.tree.sync()
+        print("Commands synced successfully!")
+    except Exception as e:
+        print(f"Error syncing commands: {str(e)}")
 
 # Set up slash commands
 @client.tree.command(name="clanhighscores", description="Display the clan highscores")
