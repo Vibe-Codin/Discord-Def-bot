@@ -34,10 +34,14 @@ highscore_messages = {
 
 async def fetch_clan_data():
     try:
+        headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
         async with aiohttp.ClientSession() as session:
             url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"  # Updated endpoint
             print(f"Fetching clan data from: {url}")
-            async with session.get(url) as resp:
+            async with session.get(url, headers=headers) as resp:
                 if resp.status != 200:
                     print(f"Error status: {resp.status}")
                     error_text = await resp.text()
