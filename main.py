@@ -217,21 +217,25 @@ class BossesDropdown(discord.ui.Select):
             cached_entry = self.cached_embeds.get(selected_value, None)
             cache_age = 0
 
-            if cached_entry and hasattr(cached_entry, '_cache_time') and isinstance(cached_entry._cache_time, (int, float)):
-                cache_age = current_time - cached_entry._cache_time
+            # Store cache time in a separate dictionary to avoid attribute issues
+            if not hasattr(self.bot, 'cache_times'):
+                self.bot.cache_times = {}
+
+            if cached_entry and selected_value in self.bot.cache_times:
+                cache_age = current_time - self.bot.cache_times[selected_value]
                 embed = cached_entry
                 print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
             elif selected_value == "bosses_overview":
                 embed = await self.bot.create_bosses_overview_embed()
                 if isinstance(embed, discord.Embed):
-                    embed._cache_time = current_time
+                    self.bot.cache_times[selected_value] = current_time
                     embed.timestamp = datetime.now()
                     self.cached_embeds["bosses_overview"] = embed
             else:
                 # For specific boss
                 embed = await self.bot.create_single_category_embed(selected_value)
                 if isinstance(embed, discord.Embed):
-                    embed._cache_time = current_time
+                    self.bot.cache_times[selected_value] = current_time
                     embed.timestamp = datetime.now()
                     self.cached_embeds[selected_value] = embed
 
@@ -337,6 +341,7 @@ class HighscoresBot(discord.Client):
         self.api_semaphore = asyncio.Semaphore(5)  # Allow up to 5 concurrent API requests
         # Cache for player validation results
         self.player_validation_cache = {}
+        self.cache_times = {} # Added cache_times dictionary
 
     async def on_ready(self):
         print(f'{self.user} has connected to Discord!')
@@ -1269,8 +1274,10 @@ async def on_ready():
                     # Set proper timestamp for the embed
                     if isinstance(embed_or_error, discord.Embed):
                         embed_or_error.timestamp = datetime.now()
-                        # Store embed in cache without setting attribute directly
-                        client.cached_embeds["total"] = embed_or_error
+                        # Store cache time in dictionary
+                        if not hasattr(client, 'cache_times'):
+                            client.cache_times = {}
+                        client.cache_times["total"] = time.time()
 
                     # Create view with buttons
                     view = HighscoresView(client, client.cached_embeds)
@@ -1336,15 +1343,17 @@ async def on_ready():
     for guild in client.guilds:
         for channel in guild.text_channels:
             if channel.permissions_for(guild.me).send_messages:
-                                embed_or_error = await client.update_highscores()
+                embed_or_error = await client.update_highscores()
                 if isinstance(embed_or_error, str):
                     await channel.send(f"⚠️ {embed_or_error}")
                 else:
                     # Set proper timestamp for the embed
                     if isinstance(embed_or_error, discord.Embed):
                         embed_or_error.timestamp = datetime.now()
-                        # Store cache time as a custom attribute
-                        setattr(embed_or_error, '_cache_time', time.time())
+                        # Store cache time in dictionary
+                        if not hasattr(client, 'cache_times'):
+                            client.cache_times = {}
+                        client.cache_times["total"] = time.time()
 
                     # Create view with buttons
                     view = HighscoresView(client, client.cached_embeds)
@@ -1368,7 +1377,7 @@ async def preload_categories(bot):
         bosses_overview_embed = await bot.create_bosses_overview_embed()
         if bosses_overview_embed and isinstance(bosses_overview_embed, discord.Embed):
             bot.cached_embeds["bosses_overview"] = bosses_overview_embed
-            print("Preloaded bosses overview")
+            print(""Preloaded bosses overview")
     except Exception as e:
         print(f"Error preloading bosses overview: {str(e)}")
 
