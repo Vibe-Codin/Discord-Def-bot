@@ -159,7 +159,7 @@ class HighscoresView(View):
             print("Interaction expired for bosses3 button")
         except Exception as e:
             print(f"Error in bosses3 callback: {str(e)}")
-            
+
     async def bosses4_callback(self, interaction):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
@@ -178,7 +178,7 @@ class HighscoresView(View):
             print("Interaction expired for bosses4 button")
         except Exception as e:
             print(f"Error in bosses4 callback: {str(e)}")
-            
+
     async def bosses5_callback(self, interaction):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
@@ -197,7 +197,7 @@ class HighscoresView(View):
             print("Interaction expired for bosses5 button")
         except Exception as e:
             print(f"Error in bosses5 callback: {str(e)}")
-            
+
     async def skills3_callback(self, interaction):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
@@ -245,7 +245,7 @@ class WOMClient:
         try:
             url = f"{self.base_url}/players/{username}"
             response = requests.get(url, timeout=15)  # Increased timeout
-            
+
             if response.status_code == 200:
                 try:
                     data = response.json()
@@ -290,21 +290,21 @@ class HighscoresBot(discord.Client):
         try:
             # Set this to True to see very detailed debug information
             DEBUG = True
-            
+
             if DEBUG:
                 print(f"Validating player: {player_name}")
-            
+
             # Try to get player details with a retry mechanism
             retry_count = 0
             max_retries = 3
             player_details = None
-            
+
             while retry_count < max_retries and player_details is None:
                 try:
                     # Directly request player stats from the API
                     url = f"https://api.wiseoldman.net/v2/players/{player_name}"
                     response = requests.get(url, timeout=10)
-                    
+
                     if response.status_code == 200:
                         player_details = response.json()
                     else:
@@ -315,26 +315,26 @@ class HighscoresBot(discord.Client):
                     print(f"Request error for player {player_name}: {str(e)}")
                     retry_count += 1
                     await asyncio.sleep(1)  # Wait before retry
-            
+
             # If we still couldn't get player details after retries, include them for now
             # This is temporary to avoid filtering out too many players due to API issues
             if not player_details:
                 if DEBUG:
                     print(f"Player {player_name}: Could not fetch details after {max_retries} retries, INCLUDING TEMPORARILY")
                 return True  # Include player if we can't fetch their details
-            
+
             # Now let's check if we have the skills data
             if not player_details or 'latestSnapshot' not in player_details:
                 if DEBUG:
                     print(f"Player {player_name}: No 'latestSnapshot' field in response, INCLUDING TEMPORARILY")
                 return True
-            
+
             snapshot = player_details['latestSnapshot']
             if not snapshot or 'data' not in snapshot:
                 if DEBUG:
                     print(f"Player {player_name}: No 'data' field in snapshot, INCLUDING TEMPORARILY")
                 return True
-            
+
             data = snapshot['data']
             if 'skills' not in data:
                 if DEBUG:
@@ -342,39 +342,39 @@ class HighscoresBot(discord.Client):
                 return True
 
             skills = data['skills']
-            
+
             if DEBUG:
                 print(f"Player {player_name} skills data retrieved successfully")
 
             # These are the skills we're checking (must be 2 or less)
             restricted_skills = ['attack', 'strength', 'magic', 'ranged']
-            
+
             # Check each restricted skill strictly
             for skill_name in restricted_skills:
                 if skill_name not in skills:
                     if DEBUG:
                         print(f"Player {player_name}: {skill_name.capitalize()} data missing, INCLUDING TEMPORARILY")
                     return True  # Include player if we can't check their skills
-                
+
                 skill_data = skills[skill_name]
                 if 'level' not in skill_data:
                     if DEBUG:
                         print(f"Player {player_name}: {skill_name.capitalize()} level data missing, INCLUDING TEMPORARILY")
                     return True  # Include player if we can't check their level
-                    
+
                 skill_level = skill_data['level']
-                
+
                 # If level is more than 2, exclude the player
                 if skill_level > 2:
                     if DEBUG:
                         print(f"Player {player_name} EXCLUDED: {skill_name.capitalize()} level {skill_level} > 2")
                     return False
-            
+
             # All checks passed, player meets requirements
             if DEBUG:
                 print(f"Player {player_name} VALIDATED - meets requirements (≤ 2 in Attack/Strength/Magic/Ranged)")
             return True
-            
+
         except Exception as e:
             print(f"Error validating player {player_name}: {str(e)}")
             # If there's an error, include them temporarily to avoid filtering out too many players
@@ -394,19 +394,19 @@ class HighscoresBot(discord.Client):
             color=0x3498db,
             timestamp=datetime.now()
         )
-        
+
         # Cache valid players to avoid repeated API calls
         valid_players_cache = {}
-        
+
         # Process all players to get total levels and experience
         processed_players = []
         valid_player_count = 0
         excluded_count = 0
-        
+
         print(f"Processing {len(overall_hiscores)} players for total level highscores")
         for entry in overall_hiscores:
             player_name = entry['player']['displayName']
-            
+
             # Check player cache first
             if player_name in valid_players_cache:
                 is_valid = valid_players_cache[player_name]
@@ -414,12 +414,12 @@ class HighscoresBot(discord.Client):
                 # Check if player meets combat level criteria
                 is_valid = await self.is_valid_player(player_name)
                 valid_players_cache[player_name] = is_valid  # Cache the result
-            
+
             if not is_valid:
                 print(f"FILTERED OUT: {player_name} - over combat skill limit or missing data")
                 excluded_count += 1
                 continue  # Skip this player
-                
+
             valid_player_count += 1
 
             # Use the level field directly from the API for total level
@@ -527,7 +527,11 @@ class HighscoresBot(discord.Client):
                         skill_text += f"{valid_count}. {player_name} | Lvl: {skill_level} | XP: {exp:,}\n"
 
                 if skill_text:  # Only add field if there are players with levels
-                    embed.add_field(name=skill.capitalize(), value=skill_text, inline=True)
+                    # Limit inline fields to avoid Discord's limits
+                    if embed.fields and len(embed.fields) % 3 == 0:
+                        embed.add_field(name=skill.capitalize(), value=skill_text, inline=False)
+                    else:
+                        embed.add_field(name=skill.capitalize(), value=skill_text, inline=True)
 
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
         return embed
@@ -537,7 +541,7 @@ class HighscoresBot(discord.Client):
 
     async def create_skills_embed2(self, group_name):
         return await self.create_skills_embed(group_name, part=2)
-        
+
     async def create_skills_embed3(self, group_name):
         return await self.create_skills_embed(group_name, part=3)
 
@@ -561,7 +565,7 @@ class HighscoresBot(discord.Client):
 
         # Calculate how many bosses per part (about 10 per part)
         bosses_per_part = len(all_bosses) // 5
-        
+
         if part == 1:
             bosses = all_bosses[:bosses_per_part]
             part_range = "1-10"
@@ -636,10 +640,10 @@ class HighscoresBot(discord.Client):
 
     async def create_bosses_embed3(self, group_name):
         return await self.create_bosses_embed(group_name, part=3)
-        
+
     async def create_bosses_embed4(self, group_name):
         return await self.create_bosses_embed(group_name, part=4)
-        
+
     async def create_bosses_embed5(self, group_name):
         return await self.create_bosses_embed(group_name, part=5)
 
