@@ -69,40 +69,34 @@ class HighscoresBot(discord.Client):
                 total_level = 0
                 total_exp = 0
 
-                # Calculate total level by summing individual skill levels
-                # Never fallback to the default 2277 value
+                # Calculate total level by summing individual skill levels - NEVER use the overall 'level' field
                 if 'data' in entry and 'skills' in entry['data']:
                     skills_data = entry['data']['skills']
 
-                    # Sum individual skill levels (excluding 'overall')
+                    # The Defence clan specifically doesn't train most combat skills
+                    # So we'll count only the skills that actually have data
                     skill_levels = []
                     for skill, data in skills_data.items():
-                        if skill != 'overall' and 'level' in data:
+                        # Only count skills with real data, exclude 'overall'
+                        if skill != 'overall' and 'level' in data and data.get('experience', 0) > 0:
                             skill_levels.append(data['level'])
                             total_exp += data.get('experience', 0)
 
-                    # Only use the sum of individual skills, never fallback to 2277
+                    # Calculate total level from actual skills data
                     total_level = sum(skill_levels) if skill_levels else 0
 
-                    # If we also have 'overall' experience data, use that for XP only
+                    # For experience, prioritize using the overall experience directly if available
                     if 'overall' in skills_data and 'experience' in skills_data['overall']:
                         total_exp = skills_data['overall']['experience']
-                        # But we'll NEVER use the 'level' from 'overall' as it's often wrong
 
-                    # Fallback to player stats if we couldn't calculate XP from skills
+                    # Fallback for total exp if needed
                     if total_exp == 0 and 'player' in entry and 'exp' in entry['player']:
                         total_exp = entry['player']['exp']
-                        # Still keep our calculated total_level
 
-                    # Add a debug print to see what's going on
+                    # Add debug print to verify our calculations
                     if 'overall' in skills_data and 'level' in skills_data['overall']:
                         api_overall = skills_data['overall']['level']
-                        print(f"API reported total level: {api_overall}, Our calculated level: {total_level}")
-
-
-                # Fallback to player total exp if available
-                if total_exp == 0 and 'player' in entry and 'exp' in entry['player']:
-                    total_exp = entry['player']['exp']
+                        print(f"Player: {player_name}, API reported total level: {api_overall}, Our calculated level: {total_level}")
 
                 processed_players.append({
                     'name': player_name,
