@@ -46,8 +46,8 @@ class HighscoresView(View):
         # Create a new view with skills as active category
         new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
 
-        # Get the total (Overall) embed or use cached one
-        if "total" in self.cached_embeds and hasattr(self.cached_embeds["total"], "_timestamp"):
+        # Check if we have a cached embed and if it's still valid (less than 24 hours old)
+        if "total" in self.cached_embeds and hasattr(self.cached_embeds["total"], "_timestamp") and isinstance(self.cached_embeds["total"]._timestamp, (int, float)):
             embed = self.cached_embeds["total"]
             current_time = time.time()
             cache_age = current_time - self.cached_embeds["total"]._timestamp
@@ -73,7 +73,7 @@ class HighscoresView(View):
         # Get a generic bosses overview embed or create one
         bosses_overview_key = "bosses_overview"
 
-        if bosses_overview_key in self.cached_embeds and hasattr(self.cached_embeds[bosses_overview_key], "_timestamp"):
+        if bosses_overview_key in self.cached_embeds and hasattr(self.cached_embeds[bosses_overview_key], "_timestamp") and isinstance(self.cached_embeds[bosses_overview_key]._timestamp, (int, float)):
             embed = self.cached_embeds[bosses_overview_key]
             current_time = time.time()
             cache_age = current_time - self.cached_embeds[bosses_overview_key]._timestamp
@@ -134,7 +134,7 @@ class SkillsDropdown(discord.ui.Select):
             cached_entry = self.cached_embeds.get(selected_value, None)
             cache_age = 0
 
-            if cached_entry and hasattr(cached_entry, '_timestamp'):
+            if cached_entry and hasattr(cached_entry, '_timestamp') and isinstance(cached_entry._timestamp, (int, float)):
                 cache_age = current_time - cached_entry._timestamp
 
             # Check if it's the overall total or a specific skill
@@ -223,7 +223,7 @@ class BossesDropdown(discord.ui.Select):
             cached_entry = self.cached_embeds.get(selected_value, None)
             cache_age = 0
 
-            if cached_entry and hasattr(cached_entry, '_timestamp'):
+            if cached_entry and hasattr(cached_entry, '_timestamp') and isinstance(cached_entry._timestamp, (int, float)):
                 cache_age = current_time - cached_entry._timestamp
 
             # For bosses overview or specific boss
@@ -634,7 +634,7 @@ class HighscoresBot(discord.Client):
                 for entry, validation_task in validation_tasks:
                     is_valid = await validation_task
                     if is_valid:
-                        # Extract player info
+                        # Extractplayer info
                         player_name = entry['player']['displayName']
                         skill_level = 0
                         exp = 0
