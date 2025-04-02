@@ -52,7 +52,7 @@ async def fetch_clan_data():
                     return None
                 
                 # Now fetch the members stats
-                url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/gained"
+                url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
                 print(f"Fetching members data from: {url}")
                 async with session.get(url, headers=headers) as resp:
                     if resp.status != 200:
