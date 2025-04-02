@@ -205,16 +205,16 @@ class HighscoresBot(discord.Client):
             # Get individual player details for combat skill levels
             player_details = await self.wom_client.get_player_details(player_name)
             
-            # If we can't get details for a player, we should not include them
-            # This is critical because we can't verify their combat stats
+            # If we can't get details for a player, include them by default
+            # This is more lenient than before
             if not player_details:
-                print(f"Player {player_name} excluded: Could not fetch details")
-                return False
+                print(f"Player {player_name}: Could not fetch details, including by default")
+                return True
                 
-            # If we have player data but no skills data, we should not include them
+            # If we have player data but no skills data, include them by default
             if 'data' not in player_details or 'skills' not in player_details['data']:
-                print(f"Player {player_name} excluded: No skills data available")
-                return False
+                print(f"Player {player_name}: No skills data available, including by default")
+                return True
 
             skills = player_details['data']['skills']
 
@@ -240,7 +240,7 @@ class HighscoresBot(discord.Client):
             return True
         except Exception as e:
             print(f"Error validating player {player_name}: {str(e)}")
-            # If there's an error, assume they meet criteria instead of excluding them
+            # If there's an error, include them by default
             print(f"Including player {player_name} despite error")
             return True
 
