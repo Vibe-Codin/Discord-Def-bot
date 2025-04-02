@@ -205,44 +205,47 @@ class HighscoresBot(discord.Client):
             # Get individual player details for combat skill levels
             player_details = await self.wom_client.get_player_details(player_name)
             
-            # If we can't get details for a player, include them by default
-            # This is more lenient than before
+            # Debug output for troubleshooting
+            print(f"Validating player: {player_name}")
+            
+            # If we can't get details for a player, exclude them to be safe
             if not player_details:
-                print(f"Player {player_name}: Could not fetch details, including by default")
-                return True
+                print(f"Player {player_name}: Could not fetch details, excluding")
+                return False
                 
-            # If we have player data but no skills data, include them by default
+            # If we have player data but no skills data, exclude them to be safe
             if 'data' not in player_details or 'skills' not in player_details['data']:
-                print(f"Player {player_name}: No skills data available, including by default")
-                return True
+                print(f"Player {player_name}: No skills data available, excluding")
+                return False
 
             skills = player_details['data']['skills']
 
             # These are the skills we're checking (must be 2 or less)
             restricted_skills = ['attack', 'strength', 'magic', 'ranged']
             
-            # Check each restricted skill
+            # Check each restricted skill strictly
             for skill_name in restricted_skills:
-                # If the skill exists in their data
-                if skill_name in skills:
-                    skill_level = skills[skill_name].get('level', 0)
-                    
-                    # If level is more than 2, exclude the player
-                    if skill_level > 2:
-                        print(f"Player {player_name} excluded: {skill_name.capitalize()} level {skill_level} > 2")
-                        return False
-                else:
-                    # If skill is not in their data, assume it's level 1 (this is fine)
-                    print(f"Player {player_name}: {skill_name.capitalize()} not found, assuming level 1")
+                if skill_name not in skills:
+                    # If skill is missing, we can't verify - exclude to be safe
+                    print(f"Player {player_name}: {skill_name.capitalize()} data missing, excluding")
+                    return False
+                
+                # Get the level for this skill
+                skill_level = skills[skill_name].get('level', 99)  # Default to max if can't find
+                
+                # If level is more than 2, exclude the player
+                if skill_level > 2:
+                    print(f"Player {player_name} excluded: {skill_name.capitalize()} level {skill_level} > 2")
+                    return False
             
             # All checks passed, player meets requirements
-            print(f"Player {player_name} validated - meets requirements (≤ 2 in Attack/Strength/Magic/Ranged)")
+            print(f"Player {player_name} VALIDATED - meets requirements (≤ 2 in Attack/Strength/Magic/Ranged)")
             return True
+            
         except Exception as e:
             print(f"Error validating player {player_name}: {str(e)}")
-            # If there's an error, include them by default
-            print(f"Including player {player_name} despite error")
-            return True
+            # If there's an error, exclude them to be safe
+            return False
 
     async def create_total_level_embed(self, group_name):
         # Get overall hiscores for total level ranking
@@ -263,6 +266,9 @@ class HighscoresBot(discord.Client):
         
         # Process all players to get total levels and experience
         processed_players = []
+        valid_player_count = 0
+        
+        print(f"Processing {len(overall_hiscores)} players for total level highscores")
         for entry in overall_hiscores:
             player_name = entry['player']['displayName']
             
@@ -275,8 +281,10 @@ class HighscoresBot(discord.Client):
                 valid_players_cache[player_name] = is_valid  # Cache the result
             
             if not is_valid:
-                print(f"Skipping {player_name} for total level highscore - over combat skill limit")
+                print(f"FILTERED OUT: {player_name} - over combat skill limit")
                 continue  # Skip this player if they have more than 2 in any combat skill
+                
+            valid_player_count += 1
 
             # Use the level field directly from the API for total level
             total_level = 0
