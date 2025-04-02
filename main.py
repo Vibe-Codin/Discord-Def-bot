@@ -47,7 +47,7 @@ class HighscoresView(View):
             self.add_item(BossesDropdown(self.bot, self.cached_embeds))
 
     async def skills_button_callback(self, interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.defer(ephemeral=True)
 
         # Create a new view with skills as active category
         new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
@@ -63,11 +63,20 @@ class HighscoresView(View):
                 embed.timestamp = datetime.now()
                 self.cached_embeds["total"] = embed
 
-        await interaction.message.edit(embed=embed, view=new_view)
-        await interaction.followup.send("Switched to Skills category", ephemeral=True)
+        try:
+            await interaction.message.edit(embed=embed, view=new_view)
+            await interaction.followup.send("Switched to Skills category", ephemeral=True)
+        except discord.errors.HTTPException as e:
+            print(f"Error editing message in skills button: {str(e)}")
+            try:
+                await interaction.message.channel.send(embed=embed, view=new_view)
+                await interaction.followup.send("Created new Skills embed (couldn't update existing message)", ephemeral=True)
+            except Exception as e2:
+                print(f"Error sending new message: {str(e2)}")
+                await interaction.followup.send("Failed to update or create Skills embed", ephemeral=True)
 
     async def bosses_button_callback(self, interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.defer(ephemeral=True)
 
         # Create a new view with bosses as active category
         new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
@@ -85,8 +94,17 @@ class HighscoresView(View):
                 embed.timestamp = datetime.now()
                 self.cached_embeds[bosses_overview_key] = embed
 
-        await interaction.message.edit(embed=embed, view=new_view)
-        await interaction.followup.send("Switched to Bosses category", ephemeral=True)
+        try:
+            await interaction.message.edit(embed=embed, view=new_view)
+            await interaction.followup.send("Switched to Bosses category", ephemeral=True)
+        except discord.errors.HTTPException as e:
+            print(f"Error editing message in bosses button: {str(e)}")
+            try:
+                await interaction.message.channel.send(embed=embed, view=new_view)
+                await interaction.followup.send("Created new Bosses embed (couldn't update existing message)", ephemeral=True)
+            except Exception as e2:
+                print(f"Error sending new message: {str(e2)}")
+                await interaction.followup.send("Failed to update or create Bosses embed", ephemeral=True)
 
 # Dropdown menu for highscores selection
 class SkillsDropdown(discord.ui.Select):
@@ -123,7 +141,7 @@ class SkillsDropdown(discord.ui.Select):
     async def callback(self, interaction):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
-            await interaction.response.defer(ephemeral=True, thinking=True)
+            await interaction.response.defer(ephemeral=True)
 
             selected_value = self.values[0]
             current_time = time.time()
@@ -156,35 +174,36 @@ class SkillsDropdown(discord.ui.Select):
 
             # Create a new HighscoresView with cached embeds to replace the existing view
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
-            await interaction.message.edit(embed=embed, view=new_view)
+            
+            try:
+                await interaction.message.edit(embed=embed, view=new_view)
+            except discord.errors.HTTPException as e:
+                print(f"Error editing message: {str(e)}")
+                # If edit fails, try to send a new message
+                try:
+                    await interaction.message.channel.send(embed=embed, view=new_view)
+                except Exception as e2:
+                    print(f"Error sending new message: {str(e2)}")
 
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
             try:
-                # Check if the interaction is still valid
-                if interaction.response and not interaction.is_expired():
-                    if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
-                        time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
-                        await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
-                    else:
-                        await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+                if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+                    time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
+                    await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
                 else:
-                    logger.warning(f"Interaction expired before followup could be sent for {category_name}")
-            except discord.errors.NotFound:
-                logger.warning(f"Interaction not found when sending followup for {category_name}")
+                    await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
             except Exception as e:
-                logger.error(f"Error sending followup: {str(e)}")
-                # Try a simpler message as fallback
-                try:
-                    if not interaction.is_expired():
-                        await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
-                except:
-                    logger.error(f"Even fallback interaction failed for {category_name}")
+                print(f"Error sending followup: {str(e)}")
+                
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0]}")
         except Exception as e:
             print(f"Error in skills dropdown callback: {str(e)}")
-            await interaction.followup.send(f"Error updating highscores: {str(e)}", ephemeral=True)
+            try:
+                await interaction.followup.send(f"Error updating highscores: {str(e)}", ephemeral=True)
+            except:
+                print(f"Could not send error followup")
 
 class BossesDropdown(discord.ui.Select):
     def __init__(self, bot, cached_embeds=None):
@@ -225,7 +244,7 @@ class BossesDropdown(discord.ui.Select):
     async def callback(self, interaction):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
-            await interaction.response.defer(ephemeral=True, thinking=True)
+            await interaction.response.defer(ephemeral=True)
 
             selected_value = self.values[0]
             current_time = time.time()
@@ -258,35 +277,36 @@ class BossesDropdown(discord.ui.Select):
 
             # Create a new HighscoresView with cached embeds to replace the existing view
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
-            await interaction.message.edit(embed=embed, view=new_view)
+            
+            try:
+                await interaction.message.edit(embed=embed, view=new_view)
+            except discord.errors.HTTPException as e:
+                print(f"Error editing message: {str(e)}")
+                # If edit fails, try to send a new message
+                try:
+                    await interaction.message.channel.send(embed=embed, view=new_view)
+                except Exception as e2:
+                    print(f"Error sending new message: {str(e2)}")
 
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
             try:
-                # Check if the interaction is still valid
-                if interaction.response and not interaction.is_expired():
-                    if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
-                        time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
-                        await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
-                    else:
-                        await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+                if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+                    time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
+                    await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
                 else:
-                    logger.warning(f"Interaction expired before followup could be sent for {category_name}")
-            except discord.errors.NotFound:
-                logger.warning(f"Interaction not found when sending followup for {category_name}")
+                    await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
             except Exception as e:
-                logger.error(f"Error sending followup: {str(e)}")
-                # Try a simpler message as fallback
-                try:
-                    if not interaction.is_expired():
-                        await interaction.followup.send(f"{category_name} highscores displayed!", ephemeral=True)
-                except:
-                    logger.error(f"Even fallback interaction failed for {category_name}")
+                print(f"Error sending followup: {str(e)}")
+                
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0]}")
         except Exception as e:
             print(f"Error in bosses dropdown callback: {str(e)}")
-            await interaction.followup.send(f"Error updating highscores: {str(e)}", ephemeral=True)
+            try:
+                await interaction.followup.send(f"Error updating highscores: {str(e)}", ephemeral=True)
+            except:
+                print(f"Could not send error followup")
 
 # Discord bot token
 import os
@@ -1425,14 +1445,12 @@ async def on_ready():
 
     while retry_count < max_retries:
         try:
-            # Don't clear commands first as they're already registered via decorators
-            # client.tree.clear_commands(guild=None)
+            # Clear all existing commands before adding the ones we want
+            print("Clearing existing commands...")
+            client.tree.clear_commands(guild=None)
             
-            # The commands are already registered by the decorators when the bot starts
-            # We only need to sync them
-            print("Command registration check...")
-            commands = client.tree.get_commands()
-            print(f"Pre-sync commands: {[cmd.name for cmd in commands]}")
+            # Only register the 'new' and 'refreshcache' commands
+            print("Registering only /new and /refreshcache commands...")
             
             # Sync the commands globally (may take up to an hour to propagate)
             print("Syncing command tree...")
@@ -1451,70 +1469,6 @@ async def on_ready():
                 await asyncio.sleep(5)
             else:
                 print("Failed to sync commands after multiple attempts.")
-
-# Set up slash commands with explicit decorators for better registration
-
-@client.tree.command(name="new", description="Push a new highscores embed without refreshing cache")
-@app_commands.checks.cooldown(1, 30.0, key=lambda i: i.guild_id)
-async def new(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True, ephemeral=True)
-
-    try:
-        await interaction.followup.send("Creating a new highscores embed without refreshing cache...", ephemeral=True)
-
-        # Don't refresh cache, use existing data
-        channel = interaction.channel
-        if channel:
-            # Create a new view with cached embeds
-            view = HighscoresView(client, client.cached_embeds)
-
-            # Get embed from cache or create a new one
-            if "total" in client.cached_embeds:
-                embed = client.cached_embeds["total"]
-                embed.timestamp = datetime.now()
-            else:
-                embed = await client.update_highscores(force_refresh=False)
-
-            # Send to channel
-            message = await channel.send(embed=embed, view=view)
-            client.last_message = message
-            await interaction.followup.send("New highscores embed created successfully!", ephemeral=True)
-        else:
-            await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"Error creating new embed: {str(e)}", ephemeral=True)
-        print(f"Error in new_embed command: {str(e)}")
-
-@client.tree.command(name="refreshcache", description="Refresh highscores cache and push a new embed")
-@app_commands.checks.cooldown(1, 60.0, key=lambda i: i.guild_id)
-async def refreshcache(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True, ephemeral=True)
-
-    try:
-        await interaction.followup.send("Refreshing highscores cache and creating a new embed...", ephemeral=True)
-
-        # Refresh cache and create new embed
-        channel = interaction.channel
-        if channel:
-            # Force refresh the cache
-            embed = await client.update_highscores(force_refresh=True)
-
-            # Set timestamp
-            if isinstance(embed, discord.Embed):
-                embed.timestamp = datetime.now()
-
-            # Create view
-            view = HighscoresView(client, client.cached_embeds)
-
-            # Send to channel
-            message = await channel.send(embed=embed, view=view)
-            client.last_message = message
-            await interaction.followup.send("Highscores cache refreshed and new embed created successfully!", ephemeral=True)
-        else:
-            await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"Error refreshing cache: {str(e)}", ephemeral=True)
-        print(f"Error in refresh_cache command: {str(e)}")
 
 # Add error handler for slash command errors
 @client.event
@@ -1547,7 +1501,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 # Set up only the /new and /refreshcache slash commands
 @client.tree.command(name="new", description="Push a new highscores embed without refreshing cache")
 @app_commands.checks.cooldown(1, 30.0, key=lambda i: i.guild_id)
-async def new(interaction: discord.Interaction):
+async def new_command(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     try:
@@ -1578,7 +1532,7 @@ async def new(interaction: discord.Interaction):
 
 @client.tree.command(name="refreshcache", description="Refresh highscores cache and push a new embed")
 @app_commands.checks.cooldown(1, 60.0, key=lambda i: i.guild_id)
-async def refreshcache(interaction: discord.Interaction):
+async def refresh_cache_command(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     try:
