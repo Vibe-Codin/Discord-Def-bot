@@ -84,7 +84,9 @@ class HighscoresDropdown(discord.ui.Select):
                     embed = await self.bot.create_single_category_embed(selected_value)
                     self.cached_embeds[selected_value] = embed
             
-            await interaction.message.edit(embed=embed, view=interaction.message.components[0])
+            # Create a new HighscoresView with cached embeds to replace the existing view
+            new_view = HighscoresView(self.bot, self.cached_embeds)
+            await interaction.message.edit(embed=embed, view=new_view)
             
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
