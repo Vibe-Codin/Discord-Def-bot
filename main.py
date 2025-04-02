@@ -512,7 +512,7 @@ class HighscoresBot(discord.Client):
             'defence', 'hitpoints', 'prayer', 
             'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting',
             'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',
-            'farming', 'runecraft', 'hunter', 'construction'
+            'farming', 'runecrafting', 'hunter', 'construction'
         ]
 
         # Split skills into three parts
