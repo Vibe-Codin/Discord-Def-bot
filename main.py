@@ -45,6 +45,9 @@ async def fetch_clan_data():
         # Try different API endpoints based on documentation
         # First, get the group details to verify we can access the correct clan
         group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"
+        # Also try a fallback to the base URL without version
+        base_endpoint = "https://api.wiseoldman.net/groups/2763"
+        print(f"Also trying fallback endpoint: {base_endpoint}")
         print(f"Fetching group details from: {group_endpoint}")
 
         import requests
@@ -54,26 +57,30 @@ async def fetch_clan_data():
             print(f"Group details response status: {response.status_code}")
 
             if response.status_code == 200:
-                try:
-                    group_data = response.json()
-                    print(f"Group data: {json.dumps(group_data, indent=2)[:200]}...")
+                # Check if there's actual content before trying to parse JSON
+                if response.text and response.text.strip():
+                    try:
+                        group_data = response.json()
+                        print(f"Group data: {json.dumps(group_data, indent=2)[:200]}...")
 
-                    # If we got valid group data, now fetch members
-                    if 'id' in group_data:
-                        group_id = group_data['id']
-                        print(f"Found group ID: {group_id}")
+                        # If we got valid group data, now fetch members
+                        if 'id' in group_data:
+                            group_id = group_data['id']
+                            print(f"Found group ID: {group_id}")
 
-                        # Use the found group ID to fetch members
-                        members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{group_id}/members"
-                        print(f"Fetching members from: {members_endpoint}")
+                            # Use the found group ID to fetch members
+                            members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{group_id}/members"
+                            print(f"Fetching members from: {members_endpoint}")
 
-                        members_response = requests.get(members_endpoint, headers=headers, timeout=15)
-                        if members_response.status_code == 200:
-                            members_data = members_response.json()
-                            print(f"Found {len(members_data)} members")
-                            return members_data
-                except json.JSONDecodeError as e:
-                    print(f"Error decoding group JSON: {e}")
+                            members_response = requests.get(members_endpoint, headers=headers, timeout=15)
+                            if members_response.status_code == 200 and members_response.text.strip():
+                                members_data = members_response.json()
+                                print(f"Found {len(members_data)} members")
+                                return members_data
+                    except json.JSONDecodeError as e:
+                        print(f"Error decoding group JSON: {e}")
+                else:
+                    print(f"Received empty response from {group_endpoint}")
         except Exception as e:
             print(f"Error with direct request: {e}")
 
