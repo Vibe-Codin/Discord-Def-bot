@@ -41,13 +41,13 @@ class HighscoresView(View):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
             await interaction.response.defer(ephemeral=True, thinking=True)
-            
+
             if "total" in self.cached_embeds:
                 embed = self.cached_embeds["total"]
             else:
                 embed = await self.bot.update_highscores(view_type="total")
                 self.cached_embeds["total"] = embed
-                
+
             await interaction.message.edit(embed=embed, view=self)
             # Send a follow-up message that's only visible to the user who clicked
             await interaction.followup.send("Highscores updated!", ephemeral=True)
@@ -60,13 +60,13 @@ class HighscoresView(View):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
             await interaction.response.defer(ephemeral=True, thinking=True)
-            
+
             if "skills1" in self.cached_embeds:
                 embed = self.cached_embeds["skills1"]
             else:
                 embed = await self.bot.update_highscores(view_type="skills1")
                 self.cached_embeds["skills1"] = embed
-                
+
             await interaction.message.edit(embed=embed, view=self)
             # Send a follow-up message that's only visible to the user who clicked
             await interaction.followup.send("Skills 1 highscores updated!", ephemeral=True)
@@ -74,18 +74,18 @@ class HighscoresView(View):
             print("Interaction expired for skills1 button")
         except Exception as e:
             print(f"Error in skills1 callback: {str(e)}")
-            
+
     async def skills2_callback(self, interaction):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
             await interaction.response.defer(ephemeral=True, thinking=True)
-            
+
             if "skills2" in self.cached_embeds:
                 embed = self.cached_embeds["skills2"]
             else:
                 embed = await self.bot.update_highscores(view_type="skills2")
                 self.cached_embeds["skills2"] = embed
-                
+
             await interaction.message.edit(embed=embed, view=self)
             # Send a follow-up message that's only visible to the user who clicked
             await interaction.followup.send("Skills 2 highscores updated!", ephemeral=True)
@@ -98,13 +98,13 @@ class HighscoresView(View):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
             await interaction.response.defer(ephemeral=True, thinking=True)
-            
+
             if "bosses1" in self.cached_embeds:
                 embed = self.cached_embeds["bosses1"]
             else:
                 embed = await self.bot.update_highscores(view_type="bosses1")
                 self.cached_embeds["bosses1"] = embed
-                
+
             await interaction.message.edit(embed=embed, view=self)
             # Send a follow-up message that's only visible to the user who clicked
             await interaction.followup.send("Bosses 1 highscores updated!", ephemeral=True)
@@ -112,18 +112,18 @@ class HighscoresView(View):
             print("Interaction expired for bosses1 button")
         except Exception as e:
             print(f"Error in bosses1 callback: {str(e)}")
-            
+
     async def bosses2_callback(self, interaction):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
             await interaction.response.defer(ephemeral=True, thinking=True)
-            
+
             if "bosses2" in self.cached_embeds:
                 embed = self.cached_embeds["bosses2"]
             else:
                 embed = await self.bot.update_highscores(view_type="bosses2")
                 self.cached_embeds["bosses2"] = embed
-                
+
             await interaction.message.edit(embed=embed, view=self)
             # Send a follow-up message that's only visible to the user who clicked
             await interaction.followup.send("Bosses 2 highscores updated!", ephemeral=True)
@@ -131,18 +131,18 @@ class HighscoresView(View):
             print("Interaction expired for bosses2 button")
         except Exception as e:
             print(f"Error in bosses2 callback: {str(e)}")
-            
+
     async def bosses3_callback(self, interaction):
         try:
             # Use defer with ephemeral=True to show loading only to the user who clicked
             await interaction.response.defer(ephemeral=True, thinking=True)
-            
+
             if "bosses3" in self.cached_embeds:
                 embed = self.cached_embeds["bosses3"]
             else:
                 embed = await self.bot.update_highscores(view_type="bosses3")
                 self.cached_embeds["bosses3"] = embed
-                
+
             await interaction.message.edit(embed=embed, view=self)
             # Send a follow-up message that's only visible to the user who clicked
             await interaction.followup.send("Bosses 3 highscores updated!", ephemeral=True)
@@ -174,7 +174,7 @@ class WOMClient:
         if response.status_code == 200:
             return response.json()
         return None
-        
+
     async def get_player_details(self, username):
         try:
             url = f"{self.base_url}/players/{username}"
@@ -208,39 +208,40 @@ class HighscoresBot(discord.Client):
                 print(f"Warning: Couldn't fetch details for player {player_name}")
                 # Instead of skipping, let's include players we can't validate to ensure we have results
                 return True
-            
+
             skills = player_details['data']['skills']
-            
+
             # Debug output to check levels
             if 'attack' in skills and 'strength' in skills and 'magic' in skills and 'ranged' in skills:
                 print(f"Player {player_name} combat levels - Attack: {skills['attack'].get('level', 0)}, Strength: {skills['strength'].get('level', 0)}, Magic: {skills['magic'].get('level', 0)}, Ranged: {skills['ranged'].get('level', 0)}")
-            
-            # Check attack level (increased threshold to 5)
-            if 'attack' in skills and skills['attack'].get('level', 0) > 5:
-                print(f"Player {player_name} excluded: Attack level {skills['attack'].get('level', 0)} > 5")
+
+            # Check attack level (must be 2 or less)
+            if 'attack' in skills and skills['attack'].get('level', 0) > 2:
+                print(f"Player {player_name} excluded: Attack level {skills['attack'].get('level', 0)} > 2")
                 return False
-                
-            # Check strength level (increased threshold to 5)
-            if 'strength' in skills and skills['strength'].get('level', 0) > 5:
-                print(f"Player {player_name} excluded: Strength level {skills['strength'].get('level', 0)} > 5")
+
+            # Check strength level (must be 2 or less)
+            if 'strength' in skills and skills['strength'].get('level', 0) > 2:
+                print(f"Player {player_name} excluded: Strength level {skills['strength'].get('level', 0)} > 2")
                 return False
-                
-            # Check magic level (increased threshold to 5)
-            if 'magic' in skills and skills['magic'].get('level', 0) > 5:
-                print(f"Player {player_name} excluded: Magic level {skills['magic'].get('level', 0)} > 5")
+
+            # Check magic level (must be 2 or less)
+            if 'magic' in skills and skills['magic'].get('level', 0) > 2:
+                print(f"Player {player_name} excluded: Magic level {skills['magic'].get('level', 0)} > 2")
                 return False
-                
-            # Check ranged level (increased threshold to 5)
-            if 'ranged' in skills and skills['ranged'].get('level', 0) > 5:
-                print(f"Player {player_name} excluded: Ranged level {skills['ranged'].get('level', 0)} > 5")
+
+            # Check ranged level (must be 2 or less)
+            if 'ranged' in skills and skills['ranged'].get('level', 0) > 2:
+                print(f"Player {player_name} excluded: Ranged level {skills['ranged'].get('level', 0)} > 2")
                 return False
-                
-            print(f"Player {player_name} validated - meets requirements (≤ 5 in combat skills)")
-            return True  # If all combat skills are 5 or less
+
+            # Note: Defence, Hitpoints, and Prayer can be any level
+            print(f"Player {player_name} validated - meets requirements (≤ 2 in Attack/Strength/Magic/Ranged)")
+            return True  # If all combat skills are 2 or less
         except Exception as e:
             print(f"Error validating player {player_name}: {str(e)}")
             return False  # If there's an error, assume they're invalid to be safe
-        
+
     async def create_total_level_embed(self, group_name):
         # Get overall hiscores for total level ranking
         overall_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric='overall')
@@ -250,7 +251,7 @@ class HighscoresBot(discord.Client):
         # Prepare highscores embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Total Level",
-            description=f"Top players in {group_name} by total level (≤ 5 in Attack/Strength/Magic/Ranged)",
+            description=f"Top players in {group_name} by total level (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -259,7 +260,7 @@ class HighscoresBot(discord.Client):
         processed_players = []
         for entry in overall_hiscores:
             player_name = entry['player']['displayName']
-            
+
             # Check if player meets combat level criteria
             if not await self.is_valid_player(player_name):
                 print(f"Skipping {player_name} for total level highscore - over combat skill limit")
@@ -307,7 +308,7 @@ class HighscoresBot(discord.Client):
             'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',
             'farming', 'runecraft', 'hunter', 'construction'
         ]
-        
+
         # Split skills into two parts
         skills_per_part = len(all_skills) // 2
         if part == 1:
@@ -316,11 +317,11 @@ class HighscoresBot(discord.Client):
         else:  # part 2
             skills = all_skills[skills_per_part:]  # Second half of skills
             part_range = "Gathering & Production"
-            
+
         # Prepare skills embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Skills {part_range}",
-            description=f"Top 5 players in each skill for {group_name} (≤ 5 in Attack/Strength/Magic/Ranged)",
+            description=f"Top 5 players in each skill for {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -332,19 +333,19 @@ class HighscoresBot(discord.Client):
                 skill_text = ""
                 valid_count = 0
                 processed_count = 0
-                
+
                 # Keep processing until we get 5 valid players or run out of entries
                 while valid_count < 5 and processed_count < len(skill_hiscores):
                     entry = skill_hiscores[processed_count]
                     processed_count += 1
-                    
+
                     player_name = entry['player']['displayName']
-                    
+
                     # Check if player meets combat level criteria
                     if not await self.is_valid_player(player_name):
                         print(f"Skipping {player_name} for {skill} highscore - over combat skill limit")
                         continue  # Skip this player
-                        
+
                     # For individual skills, get level and experience directly from the data object
                     skill_level = 0
                     exp = 0
@@ -367,10 +368,10 @@ class HighscoresBot(discord.Client):
 
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
         return embed
-        
+
     async def create_skills_embed1(self, group_name):
         return await self.create_skills_embed(group_name, part=1)
-        
+
     async def create_skills_embed2(self, group_name):
         return await self.create_skills_embed(group_name, part=2)
 
@@ -391,7 +392,7 @@ class HighscoresBot(discord.Client):
             'venenatis', 'vetion', 'vorkath', 'wintertodt',
             'zalcano', 'zulrah'
         ]
-        
+
         # Calculate how many bosses per part
         bosses_per_part = len(all_bosses) // 3
         if part == 1:
@@ -403,11 +404,11 @@ class HighscoresBot(discord.Client):
         else:  # part 3
             bosses = all_bosses[2*bosses_per_part:]
             part_range = "33-50"
-        
+
         # Prepare bosses embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Bosses {part_range}",
-            description=f"Top 5 players for each boss in {group_name} (≤ 5 in Attack/Strength/Magic/Ranged)",
+            description=f"Top 5 players for each boss in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -420,19 +421,19 @@ class HighscoresBot(discord.Client):
                     boss_text = ""
                     valid_count = 0
                     processed_count = 0
-                    
+
                     # Keep processing until we get 5 valid players or run out of entries
                     while valid_count < 5 and processed_count < len(boss_hiscores):
                         entry = boss_hiscores[processed_count]
                         processed_count += 1
-                        
+
                         player_name = entry['player']['displayName']
-                        
+
                         # Check if player meets combat level criteria
                         if not await self.is_valid_player(player_name):
                             print(f"Skipping {player_name} for {boss} highscore - over combat skill limit")
                             continue  # Skip this player
-                            
+
                         # Get the kill count
                         kills = 0
                         if 'data' in entry and 'kills' in entry['data']:
@@ -453,13 +454,13 @@ class HighscoresBot(discord.Client):
 
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
         return embed
-        
+
     async def create_bosses_embed1(self, group_name):
         return await self.create_bosses_embed(group_name, part=1)
-        
+
     async def create_bosses_embed2(self, group_name):
         return await self.create_bosses_embed(group_name, part=2)
-        
+
     async def create_bosses_embed3(self, group_name):
         return await self.create_bosses_embed(group_name, part=3)
 
