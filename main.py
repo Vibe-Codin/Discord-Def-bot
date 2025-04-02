@@ -339,10 +339,10 @@ class HighscoresBot(discord.Client):
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(intents=intents, *args, **kwargs)
-        
+
         # Create command tree for slash commands
         self.tree = discord.app_commands.CommandTree(self)
-        
+
         self.wom_client = WOMClient()
         self.GROUP_ID = 2763  # Group ID for OSRS Defence clan
         self.last_message = None
