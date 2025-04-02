@@ -332,19 +332,22 @@ def build_messages(clan_data):
 
     # Helper function to get total level and experience
     def get_total_level_and_exp(player):
-        # First try to get it from the player's level and exp fields
-        total_level = player.get('level', 0)
+        # First try to get it from the player's exp field for experience
         total_exp = player.get('exp', 0)
         
-        # Try to extract from different data structures
+        # For maxed players in OSRS, total level should be 2277 (99 in all 23 skills)
+        max_total_level = 2277
+        
+        # Set a default level of 0 that we'll try to improve
+        total_level = 0
+        
+        # Check if the player has latestSnapshot data
         if 'latestSnapshot' in player and player['latestSnapshot']:
             snapshot = player['latestSnapshot']
             
             # Check if this is a direct WOM API response format
             if isinstance(snapshot, dict):
-                # Try to get from player top-level fields first (these are often more reliable)
-                if total_level == 0 and 'level' in player:
-                    total_level = player['level']
+                # Try to get exp from player top-level fields first (these are often more reliable)
                 if total_exp == 0 and 'exp' in player:
                     total_exp = player['exp']
                     
@@ -353,12 +356,23 @@ def build_messages(clan_data):
                     data = snapshot['data']
                     if 'skills' in data and isinstance(data['skills'], dict):
                         skills_data = data['skills']
+                        
+                        # Check for overall level directly
                         if 'overall' in skills_data and isinstance(skills_data['overall'], dict):
                             overall = skills_data['overall']
-                            if total_level == 0 and 'level' in overall:
+                            if 'level' in overall:
                                 total_level = overall['level']
                             if total_exp == 0 and 'experience' in overall:
                                 total_exp = overall['experience']
+                        
+                        # If overall doesn't have level, try to sum individual skill levels
+                        if total_level == 0:
+                            skill_levels = []
+                            for skill_name, skill_data in skills_data.items():
+                                if skill_name != 'overall' and isinstance(skill_data, dict) and 'level' in skill_data:
+                                    skill_levels.append(skill_data['level'])
+                            if skill_levels:
+                                total_level = sum(skill_levels)
                     
                     # Try direct overall in data
                     elif 'overall' in data and isinstance(data['overall'], dict):
@@ -366,25 +380,16 @@ def build_messages(clan_data):
                             total_level = data['overall']['level']
                         if total_exp == 0 and 'experience' in data['overall']:
                             total_exp = data['overall']['experience']
-                    
-                    # Try summing all skills if we still don't have a level
-                    if total_level == 0 and 'skills' in data and isinstance(data['skills'], dict):
-                        skills = data['skills']
-                        skill_levels = []
-                        for skill_name, skill_data in skills.items():
-                            if isinstance(skill_data, dict) and 'level' in skill_data:
-                                skill_levels.append(skill_data['level'])
-                        if skill_levels:
-                            total_level = sum(skill_levels)
-                
-        # If we still have level 0 but have exp, estimate level
-        if total_level == 0 and total_exp > 0:
-            # Use a simple estimation formula based on total XP
-            if total_exp > 13_034_431:  # XP for level 99 in all skills
-                total_level = 2277  # Max level
-            else:
-                # Rough estimate based on XP curve
-                total_level = int(total_exp / 7000)
+        
+        # For high-level accounts with lots of XP, assume they are maxed if we couldn't get a level
+        if total_level == 0 and total_exp > 200_000_000:  # Very high XP, likely maxed
+            total_level = max_total_level
+        elif total_level == 0 and total_exp > 13_034_431:  # XP for level 99 in all skills
+            total_level = max_total_level
+        elif total_level == 0 and total_exp > 0:
+            # Estimate level based on experience (rough approximation)
+            estimated_level = int(total_exp / 7000)
+            total_level = min(estimated_level, max_total_level)  # Cap at max level
                 
         return (total_level, total_exp)
     
@@ -475,6 +480,16 @@ def build_messages(clan_data):
             if exp > 0 or level > 0:
                 msg2 += f"- {display_name} | Level: {level} | XP: {exp:,}\n"
                 player_added = True
+                
+        # Debug output for the first skill to understand data issues
+        if skill == skills_list[0] and not player_added:
+            if len(filtered) > 0:
+                sample_player = filtered[0]
+                print(f"Debug: No players found for {skill}. Sample player structure:")
+                if 'latestSnapshot' in sample_player:
+                    snapshot = sample_player['latestSnapshot']
+                    if 'data' in snapshot and 'skills' in snapshot['data']:
+                        print(f"Skills found in player data: {list(snapshot['data']['skills'].keys())}")
         
         if not player_added:
             msg2 += "*No data available*\n"
