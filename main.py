@@ -286,19 +286,39 @@ class WOMClient:
         if cache_key in self.cache and current_time < self.cache_expiry.get(cache_key, 0):
             return self.cache[cache_key]
 
-        # Make the API request
-        try:
-            response = self.session.get(url, params=params, timeout=timeout)
-            if response.status_code == 200:
-                data = response.json()
-                # Cache the successful response
-                self.cache[cache_key] = data
-                self.cache_expiry[cache_key] = current_time + self.CACHE_DURATION
-                return data
-            return None
-        except Exception as e:
-            print(f"API request error for {url}: {str(e)}")
-            return None
+        # Make the API request with retry logic for rate limits
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count <= max_retries:
+            try:
+                response = self.session.get(url, params=params, timeout=timeout)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    # Cache the successful response
+                    self.cache[cache_key] = data
+                    self.cache_expiry[cache_key] = current_time + self.CACHE_DURATION
+                    return data
+                elif response.status_code == 429:
+                    # Rate limited - implement exponential backoff
+                    wait_time = 1.5 * (2 ** retry_count)  # 1.5, 3, 6, 12 seconds
+                    print(f"Rate limited (429) for {url}, waiting {wait_time}s before retry ({retry_count+1}/{max_retries+1})")
+                    await asyncio.sleep(wait_time)
+                    retry_count += 1
+                else:
+                    print(f"API returned status code {response.status_code} for {url}")
+                    return None
+            except Exception as e:
+                print(f"API request error for {url}: {str(e)}")
+                retry_count += 1
+                if retry_count <= max_retries:
+                    await asyncio.sleep(1.0)
+                else:
+                    return None
+        
+        # If we've exhausted all retries
+        return None
 
     async def get_group_details(self, group_id):
         cache_key = f"group_details_{group_id}"
@@ -373,7 +393,7 @@ class HighscoresBot(discord.Client):
 
             # Try to get player details with a retry mechanism
             retry_count = 0
-            max_retries = 3
+            max_retries = 4  # Increased max retries
             player_details = None
             session = requests.Session()  # Use a session for better performance
 
@@ -385,14 +405,20 @@ class HighscoresBot(discord.Client):
 
                     if response.status_code == 200:
                         player_details = response.json()
+                    elif response.status_code == 429:
+                        # Rate limited - implement exponential backoff
+                        wait_time = 1.0 * (2 ** retry_count)  # 1, 2, 4, 8 seconds
+                        print(f"API returned status code 429 for player {player_name}, waiting {wait_time}s before retry")
+                        retry_count += 1
+                        await asyncio.sleep(wait_time)
                     else:
                         print(f"API returned status code {response.status_code} for player {player_name}")
                         retry_count += 1
-                        await asyncio.sleep(0.5)  # Reduced wait time for faster processing
+                        await asyncio.sleep(1.0)  # Increased wait time for better rate limit handling
                 except Exception as e:
                     print(f"Request error for player {player_name}: {str(e)}")
                     retry_count += 1
-                    await asyncio.sleep(0.5)  # Reduced wait time
+                    await asyncio.sleep(1.0)  # Increased wait time
 
             # If we still couldn't get player details after retries, include them for now
             # This is temporary to avoid filtering out too many players due to API issues
@@ -473,6 +499,7 @@ class HighscoresBot(discord.Client):
         processed_players = []
         valid_player_count = 0
         excluded_count = 0
+        rate_limited_count = 0
 
         # Use a bounded semaphore to limit concurrent API calls
         # and process players in batches to avoid overwhelming the API
@@ -480,56 +507,63 @@ class HighscoresBot(discord.Client):
         print(f"Processing up to 30 players for total level highscores")
 
         # Process players in batches to validate them
-        batch_size = 10  # Process 10 players at a time
+        batch_size = 5  # Reduced batch size to avoid rate limits
         # Process up to 30 players to get at least 20 valid ones
         max_players_to_check = min(30, len(overall_hiscores))
         batches = [overall_hiscores[i:i+batch_size] for i in range(0, max_players_to_check, batch_size)]
 
-        for batch in batches:
+        for batch_index, batch in enumerate(batches):
             # Create tasks for validating all players in the batch concurrently
             validation_tasks = []
             for entry in batch:
                 player_name = entry['player']['displayName']
-                validation_tasks.append(self.is_valid_player(player_name))
+                validation_tasks.append((player_name, entry, self.is_valid_player(player_name)))
 
-            # Run all validation tasks concurrently
-            validation_results = await asyncio.gather(*validation_tasks)
+            # Process results as they complete
+            for player_name, entry, validation_task in validation_tasks:
+                try:
+                    is_valid = await validation_task
+                    
+                    if not is_valid:
+                        print(f"FILTERED OUT: {player_name} - over combat skill limit or missing data")
+                        excluded_count += 1
+                        continue  # Skip this player
 
-            # Process the results
-            for i, is_valid in enumerate(validation_results):
-                entry = batch[i]
-                player_name = entry['player']['displayName']
+                    valid_player_count += 1
 
-                if not is_valid:
-                    print(f"FILTERED OUT: {player_name} - over combat skill limit or missing data")
-                    excluded_count += 1
-                    continue  # Skip this player
+                    # Use the level field directly from the API for total level
+                    total_level = 0
+                    total_exp = 0
 
-                valid_player_count += 1
+                    # Get total level and exp from the API
+                    if 'data' in entry:
+                        if 'level' in entry['data']:
+                            total_level = entry['data']['level']
+                        if 'experience' in entry['data']:
+                            total_exp = entry['data']['experience']
 
-                # Use the level field directly from the API for total level
-                total_level = 0
-                total_exp = 0
+                    # Fallback if we couldn't find it in the expected location
+                    if total_level == 0 and 'player' in entry and 'exp' in entry['player']:
+                        total_exp = entry['player']['exp']
 
-                # Get total level and exp from the API
-                if 'data' in entry:
-                    if 'level' in entry['data']:
-                        total_level = entry['data']['level']
-                    if 'experience' in entry['data']:
-                        total_exp = entry['data']['experience']
+                    processed_players.append({
+                        'name': player_name,
+                        'total_level': total_level,
+                        'total_exp': total_exp
+                    })
+                    
+                except Exception as e:
+                    if "429" in str(e):
+                        print(f"Rate limited while processing player {player_name}. Waiting before retrying.")
+                        rate_limited_count += 1
+                    else:
+                        print(f"Error processing player {player_name}: {str(e)}")
 
-                # Fallback if we couldn't find it in the expected location
-                if total_level == 0 and 'player' in entry and 'exp' in entry['player']:
-                    total_exp = entry['player']['exp']
-
-                processed_players.append({
-                    'name': player_name,
-                    'total_level': total_level,
-                    'total_exp': total_exp
-                })
-
-            # Small delay between batches to avoid rate limiting
-            await asyncio.sleep(0.1)
+            # Larger delay between batches to avoid rate limiting
+            # Exponential backoff based on batch index
+            delay = min(1.0 + (batch_index * 0.5), 5.0)  # Gradually increase delay up to 5 seconds
+            print(f"Waiting {delay:.1f}s before next batch to avoid rate limits...")
+            await asyncio.sleep(delay)
 
         # Print the actual number of players we processed vs filtered
         print(f"Processed {len(processed_players)} valid players from {max_players_to_check} total checked")
@@ -988,7 +1022,7 @@ class HighscoresBot(discord.Client):
                 timestamp=datetime.now()
             )
 
-            # All bosses to check
+            # All bosses to check - specific list of only supported bosses
             all_bosses = [
                 'amoxliatl', 'barrows_chests', 'bryophyta', 'callisto', 
                 'calvarion', 'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
