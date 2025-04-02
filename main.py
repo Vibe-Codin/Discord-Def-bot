@@ -174,6 +174,13 @@ class WOMClient:
         if response.status_code == 200:
             return response.json()
         return None
+        
+    async def get_player_details(self, username):
+        url = f"{self.base_url}/players/{username}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.json()
+        return None
 
 # Discord bot
 class HighscoresBot(discord.Client):
@@ -187,6 +194,32 @@ class HighscoresBot(discord.Client):
     async def on_ready(self):
         print(f'{self.user} has connected to Discord!')
 
+    async def is_valid_player(self, player_name):
+        # Get individual player details for combat skill levels
+        player_details = await self.wom_client.get_player_details(player_name)
+        if not player_details or 'data' not in player_details or 'skills' not in player_details['data']:
+            return True  # If we can't check, assume they're valid
+        
+        skills = player_details['data']['skills']
+        
+        # Check attack level
+        if 'attack' in skills and skills['attack'].get('level', 0) > 2:
+            return False
+            
+        # Check strength level
+        if 'strength' in skills and skills['strength'].get('level', 0) > 2:
+            return False
+            
+        # Check magic level
+        if 'magic' in skills and skills['magic'].get('level', 0) > 2:
+            return False
+            
+        # Check ranged level
+        if 'ranged' in skills and skills['ranged'].get('level', 0) > 2:
+            return False
+            
+        return True  # If all combat skills are 2 or less, or not found
+        
     async def create_total_level_embed(self, group_name):
         # Get overall hiscores for total level ranking
         overall_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric='overall')
@@ -196,7 +229,7 @@ class HighscoresBot(discord.Client):
         # Prepare highscores embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Total Level",
-            description=f"Top players in {group_name} by total level",
+            description=f"Top players in {group_name} by total level (≤ 2 in Attack/Strength/Magic/Ranged)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -205,6 +238,10 @@ class HighscoresBot(discord.Client):
         processed_players = []
         for entry in overall_hiscores:
             player_name = entry['player']['displayName']
+            
+            # Check if player meets combat level criteria
+            if not await self.is_valid_player(player_name):
+                continue  # Skip this player if they have more than 2 in any combat skill
 
             # Use the level field directly from the API for total level
             total_level = 0
@@ -261,7 +298,7 @@ class HighscoresBot(discord.Client):
         # Prepare skills embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Skills {part_range}",
-            description=f"Top 5 players in each skill for {group_name} (Part {part})",
+            description=f"Top 5 players in each skill for {group_name} (≤ 2 in Attack/Strength/Magic/Ranged)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -271,10 +308,20 @@ class HighscoresBot(discord.Client):
             skill_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=skill)
             if skill_hiscores:
                 skill_text = ""
-                # Only get top 5 for each skill
-                for i, entry in enumerate(skill_hiscores[:5], 1):
+                valid_count = 0
+                processed_count = 0
+                
+                # Keep processing until we get 5 valid players or run out of entries
+                while valid_count < 5 and processed_count < len(skill_hiscores):
+                    entry = skill_hiscores[processed_count]
+                    processed_count += 1
+                    
                     player_name = entry['player']['displayName']
-
+                    
+                    # Check if player meets combat level criteria
+                    if not await self.is_valid_player(player_name):
+                        continue  # Skip this player
+                        
                     # For individual skills, get level and experience directly from the data object
                     skill_level = 0
                     exp = 0
@@ -289,7 +336,8 @@ class HighscoresBot(discord.Client):
 
                     # Only include players who actually have levels in this skill
                     if exp > 0:
-                        skill_text += f"{i}. {player_name} | Lvl: {skill_level} | XP: {exp:,}\n"
+                        valid_count += 1
+                        skill_text += f"{valid_count}. {player_name} | Lvl: {skill_level} | XP: {exp:,}\n"
 
                 if skill_text:  # Only add field if there are players with levels
                     embed.add_field(name=skill.capitalize(), value=skill_text, inline=True)
@@ -336,7 +384,7 @@ class HighscoresBot(discord.Client):
         # Prepare bosses embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Bosses {part_range}",
-            description=f"Top 5 players for each boss in {group_name} (Part {part})",
+            description=f"Top 5 players for each boss in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -347,10 +395,20 @@ class HighscoresBot(discord.Client):
                 boss_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=boss)
                 if boss_hiscores:
                     boss_text = ""
-                    # Only get top 5 for each boss
-                    for i, entry in enumerate(boss_hiscores[:5], 1):
+                    valid_count = 0
+                    processed_count = 0
+                    
+                    # Keep processing until we get 5 valid players or run out of entries
+                    while valid_count < 5 and processed_count < len(boss_hiscores):
+                        entry = boss_hiscores[processed_count]
+                        processed_count += 1
+                        
                         player_name = entry['player']['displayName']
-
+                        
+                        # Check if player meets combat level criteria
+                        if not await self.is_valid_player(player_name):
+                            continue  # Skip this player
+                            
                         # Get the kill count
                         kills = 0
                         if 'data' in entry and 'kills' in entry['data']:
@@ -358,7 +416,8 @@ class HighscoresBot(discord.Client):
 
                         # Only include players who have kills for this boss
                         if kills > 0:
-                            boss_text += f"{i}. {player_name} | KC: {kills:,}\n"
+                            valid_count += 1
+                            boss_text += f"{valid_count}. {player_name} | KC: {kills:,}\n"
 
                     if boss_text:  # Only add field if there are players with kills
                         # Format boss name for display
