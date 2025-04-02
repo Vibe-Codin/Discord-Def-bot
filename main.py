@@ -104,7 +104,7 @@ async def clanhighscores(interaction: discord.Interaction):
         await interaction.followup.send("Error fetching clan data.")
         return
     msg1, msg2, msg3 = build_messages(clan_data)
-    channel = ctx.channel
+    channel = interaction.channel
     if highscore_messages["msg1"] is None:
         highscore_messages["msg1"] = await channel.send(msg1)
         highscore_messages["msg2"] = await channel.send(msg2)
@@ -113,7 +113,7 @@ async def clanhighscores(interaction: discord.Interaction):
         await highscore_messages["msg1"].edit(content=msg1)
         await highscore_messages["msg2"].edit(content=msg2)
         await highscore_messages["msg3"].edit(content=msg3)
-    await ctx.send("Highscores updated.")
+    await interaction.followup.send("Highscores updated!")
 
 @tasks.loop(hours=24)
 async def update_highscores_task():
