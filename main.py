@@ -706,9 +706,23 @@ async def clanhighscores(interaction: discord.Interaction):
         # Defer the response to buy time for processing
         await interaction.response.defer(ephemeral=True)
 
+        # Check permissions first
+        channel = interaction.channel
+        bot_member = channel.guild.get_member(bot.user.id)
+        permissions = channel.permissions_for(bot_member)
+        
+        if not permissions.send_messages or not permissions.embed_links:
+            await interaction.followup.send(
+                "❌ I don't have enough permissions in this channel. Please make sure I have 'Send Messages' and 'Embed Links' permissions.",
+                ephemeral=True
+            )
+            print(f"Missing required permissions in channel {channel.id}")
+            print(f"Bot needs: Send Messages: {permissions.send_messages}, Embed Links: {permissions.embed_links}")
+            return
+
         clan_data = await fetch_clan_data()
         if not clan_data:
-            await interaction.followup.send("Error fetching clan data. Please try again later.")
+            await interaction.followup.send("Error fetching clan data. Please try again later.", ephemeral=True)
             return
 
         # Create an embed with the data
@@ -718,23 +732,35 @@ async def clanhighscores(interaction: discord.Interaction):
         view = RefreshButton(bot)
 
         # Send the embed with the button to the channel
-        channel = interaction.channel
-        message = await channel.send(embed=embed, view=view)
-        highscore_messages["main"] = message
+        try:
+            message = await channel.send(embed=embed, view=view)
+            highscore_messages["main"] = message
 
-        # Send confirmation to the user
-        await interaction.followup.send("✅ Highscores posted to channel!", ephemeral=True)
+            # Send confirmation to the user
+            await interaction.followup.send("✅ Highscores posted to channel!", ephemeral=True)
+        except discord.Forbidden as e:
+            await interaction.followup.send(
+                f"❌ I don't have permission to send messages in this channel. Error: {str(e)}",
+                ephemeral=True
+            )
+            print(f"Permission denied when sending message to channel {channel.id}: {e}")
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error sending message: {str(e)}", ephemeral=True)
+            print(f"Error sending message to channel {channel.id}: {e}")
 
     except Exception as e:
         print(f"Error in clanhighscores command: {e}")
         # Try to handle the case where the initial defer failed
         try:
-            await interaction.followup.send(f"An error occurred while updating highscores: {str(e)}")
+            await interaction.followup.send(f"An error occurred while updating highscores: {str(e)}", ephemeral=True)
         except:
             # If followup fails, try to send to the channel directly
-            channel = interaction.channel
-            if channel:
-                await channel.send(f"Error processing highscores command: {str(e)}")
+            try:
+                channel = interaction.channel
+                if channel and channel.permissions_for(channel.guild.me).send_messages:
+                    await channel.send(f"Error processing highscores command: {str(e)}")
+            except Exception as channel_error:
+                print(f"Failed to send error message to channel: {channel_error}")
 
 # Add a regular command for highscores as well
 @bot.command()
@@ -769,6 +795,15 @@ async def update_highscores_task():
             print("Channel not found.")
             return
 
+        # Check permissions first
+        bot_member = channel.guild.get_member(bot.user.id)
+        permissions = channel.permissions_for(bot_member)
+        
+        if not permissions.send_messages or not permissions.embed_links:
+            print(f"Missing required permissions in channel {CHANNEL_ID}.")
+            print(f"Bot needs: Send Messages: {permissions.send_messages}, Embed Links: {permissions.embed_links}")
+            return
+
         clan_data = await fetch_clan_data()
         if not clan_data:
             print("Error fetching clan data in background task.")
@@ -782,14 +817,34 @@ async def update_highscores_task():
 
         # Send or update message
         if highscore_messages["main"] is None:
-            highscore_messages["main"] = await channel.send(embed=embed, view=view)
+            try:
+                highscore_messages["main"] = await channel.send(embed=embed, view=view)
+                print(f"Successfully sent new highscores message to channel {CHANNEL_ID}")
+            except discord.Forbidden:
+                print(f"403 Forbidden: Bot lacks permission to send messages in channel {CHANNEL_ID}")
+            except Exception as e:
+                print(f"Error sending message: {e}")
         else:
             try:
                 await highscore_messages["main"].edit(embed=embed, view=view)
+                print(f"Successfully updated highscores message in channel {CHANNEL_ID}")
+            except discord.Forbidden:
+                print(f"403 Forbidden: Bot lacks permission to edit messages in channel {CHANNEL_ID}")
+                # Try to send a new message if editing fails due to permissions
+                try:
+                    highscore_messages["main"] = await channel.send(embed=embed, view=view)
+                    print(f"Sent a new message instead of editing in channel {CHANNEL_ID}")
+                except discord.Forbidden:
+                    print(f"403 Forbidden: Bot lacks permission to send messages in channel {CHANNEL_ID}")
+                except Exception as e:
+                    print(f"Error sending message: {e}")
             except Exception as e:
                 print(f"Error editing message: {e}")
                 # If editing fails, try sending a new message
-                highscore_messages["main"] = await channel.send(embed=embed, view=view)
+                try:
+                    highscore_messages["main"] = await channel.send(embed=embed, view=view)
+                except Exception as e2:
+                    print(f"Also failed to send a new message: {e2}")
     except Exception as e:
         print(f"Error in update task: {e}")
 
