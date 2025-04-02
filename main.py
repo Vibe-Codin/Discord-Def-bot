@@ -33,11 +33,22 @@ highscore_messages = {
 }
 
 async def fetch_clan_data():
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"{WISE_OLD_MAN_BASE_URL}/clan/{CLAN_ID}/members") as resp:
-            if resp.status != 200:
-                return None
-            return await resp.json()
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = f"{WISE_OLD_MAN_BASE_URL}/clan/{CLAN_ID}/members"
+            print(f"Fetching clan data from: {url}")
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    print(f"Error status: {resp.status}")
+                    error_text = await resp.text()
+                    print(f"Error response: {error_text}")
+                    return None
+                data = await resp.json()
+                print(f"Successfully fetched data for {len(data)} members")
+                return data
+    except Exception as e:
+        print(f"Error fetching clan data: {str(e)}")
+        return None
 
 def build_messages(clan_data):
     # Filter out users with offensive combat stats > 2
