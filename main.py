@@ -157,8 +157,9 @@ class HighscoresBot(discord.Client):
         if message.author == self.user:
             return
         
-        if message.content.lower() == '!refresh' or message.content.lower() == '/clanhighscores':
-            processing_msg = await message.channel.send("Refreshing highscores... Please wait a moment.")
+        if message.content.lower() == '/clanhighscores':
+            # For /clanhighscores, we just display the highscores with latest data
+            processing_msg = await message.channel.send("Fetching highscores... Please wait a moment.")
             print(f"DEBUG: Received command: {message.content}")
             
             embed_or_error = await self.update_highscores(message)
@@ -168,7 +169,7 @@ class HighscoresBot(discord.Client):
                 await message.channel.send(f"⚠️ {embed_or_error}")
             else:
                 print("DEBUG: Successfully created embed, sending to channel")
-                # Always send a new message with the updated highscores
+                # Send a new message with the highscores
                 new_message = await message.channel.send(embed=embed_or_error)
                 self.last_message = new_message
                 
@@ -179,6 +180,40 @@ class HighscoresBot(discord.Client):
                     pass
                     
                 print("DEBUG: Message sent successfully")
+        
+        elif message.content.lower() == '!refresh':
+            # For !refresh, we update the last sent message if it exists
+            if self.last_message is None:
+                await message.channel.send("No highscores message to refresh. Please use `/clanhighscores` first.")
+                return
+                
+            processing_msg = await message.channel.send("Refreshing highscores... Please wait a moment.")
+            print(f"DEBUG: Received refresh command")
+            
+            embed_or_error = await self.update_highscores(message)
+            
+            if isinstance(embed_or_error, str):
+                print(f"DEBUG: Error returned: {embed_or_error}")
+                await message.channel.send(f"⚠️ {embed_or_error}")
+            else:
+                print("DEBUG: Successfully created embed, updating last message")
+                try:
+                    # Edit the last message instead of sending a new one
+                    await self.last_message.edit(embed=embed_or_error)
+                    await message.add_reaction("✅")  # Add a checkmark reaction to indicate success
+                except Exception as e:
+                    print(f"DEBUG: Error updating message: {str(e)}")
+                    await message.channel.send("Error updating the message. Sending a new one instead.")
+                    new_message = await message.channel.send(embed=embed_or_error)
+                    self.last_message = new_message
+                
+                # Delete the processing message after updating
+                try:
+                    await processing_msg.delete()
+                except:
+                    pass
+                    
+                print("DEBUG: Message refreshed successfully")
 
 intents = discord.Intents.default()
 intents.message_content = True
