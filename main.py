@@ -47,22 +47,14 @@ class HighscoresView(View):
         # Create a new view with skills as active category
         new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
 
-        # Check if we have a cached embed and if it's still valid (less than 24 hours old)
-        if "total" in self.cached_embeds and hasattr(self.cached_embeds["total"], '_cache_time') and isinstance(self.cached_embeds["total"]._cache_time, (int, float)):
+        # Always use cached embed if available, otherwise create a new one
+        if "total" in self.cached_embeds:
             embed = self.cached_embeds["total"]
-            current_time = time.time()
-            cache_age = current_time - self.cached_embeds["total"]._cache_time
-
-            if cache_age > 86400:  # If cache is older than 24 hours, refresh it
-                embed = await self.bot.update_highscores(view_type="total")
-                if isinstance(embed, discord.Embed):
-                    embed._cache_time = current_time
-                    embed.timestamp = datetime.now()
-                    self.cached_embeds["total"] = embed
+            # Update the timestamp to show it's current
+            embed.timestamp = datetime.now()
         else:
             embed = await self.bot.update_highscores(view_type="total")
             if isinstance(embed, discord.Embed):
-                embed._cache_time = time.time()
                 embed.timestamp = datetime.now()
                 self.cached_embeds["total"] = embed
 
@@ -78,21 +70,13 @@ class HighscoresView(View):
         # Get a generic bosses overview embed or create one
         bosses_overview_key = "bosses_overview"
 
-        if bosses_overview_key in self.cached_embeds and hasattr(self.cached_embeds[bosses_overview_key], '_cache_time') and isinstance(self.cached_embeds[bosses_overview_key]._cache_time, (int, float)):
+        if bosses_overview_key in self.cached_embeds:
             embed = self.cached_embeds[bosses_overview_key]
-            current_time = time.time()
-            cache_age = current_time - self.cached_embeds[bosses_overview_key]._cache_time
-
-            if cache_age > 86400:  # If cache is older than 24 hours, refresh it
-                embed = await self.bot.create_bosses_overview_embed()
-                if isinstance(embed, discord.Embed):
-                    embed._cache_time = current_time
-                    embed.timestamp = datetime.now()
-                    self.cached_embeds[bosses_overview_key] = embed
+            # Update the timestamp to show it's current
+            embed.timestamp = datetime.now()
         else:
             embed = await self.bot.create_bosses_overview_embed()
             if isinstance(embed, discord.Embed):
-                embed._cache_time = time.time()
                 embed.timestamp = datetime.now()
                 self.cached_embeds[bosses_overview_key] = embed
 
@@ -139,28 +123,24 @@ class SkillsDropdown(discord.ui.Select):
             selected_value = self.values[0]
             current_time = time.time()
 
-            # Check if we have a cached embed and if it's still valid (less than 24 hours old)
+            # Check if we have a cached embed
             cached_entry = self.cached_embeds.get(selected_value, None)
-            cache_age = 0
 
-            if cached_entry and hasattr(cached_entry, '_cache_time') and isinstance(cached_entry._cache_time, (int, float)):
-                cache_age = current_time - cached_entry._cache_time
+            if cached_entry:
                 embed = cached_entry
-                print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
+                # Update the timestamp
+                embed.timestamp = datetime.now()
+                print(f"Using cached embed for {selected_value}")
             elif selected_value == "total":
                 embed = await self.bot.update_highscores(view_type="total")
-                # Add a cache time attribute (not a timestamp for the embed)
                 if isinstance(embed, discord.Embed):
-                    embed._cache_time = current_time
                     # Set a proper discord.py timestamp
                     embed.timestamp = datetime.now()
                     self.cached_embeds["total"] = embed
             else:
                 # For specific skill
                 embed = await self.bot.create_single_category_embed(selected_value)
-                # Add a cache time attribute (not a timestamp for the embed)
                 if isinstance(embed, discord.Embed):
-                    embed._cache_time = current_time
                     # Set a proper discord.py timestamp
                     embed.timestamp = datetime.now()
                     self.cached_embeds[selected_value] = embed
@@ -494,7 +474,9 @@ class HighscoresBot(discord.Client):
 
         # Process players in batches to validate them
         batch_size = 10  # Process 10 players at a time
-        batches = [overall_hiscores[i:i+batch_size] for i in range(0, len(overall_hiscores), batch_size)]
+        # Process up to 30 players to get at least 20 valid ones
+        max_players_to_check = min(30, len(overall_hiscores))
+        batches = [overall_hiscores[i:i+batch_size] for i in range(0, max_players_to_check, batch_size)]
 
         for batch in batches:
             # Create tasks for validating all players in the batch concurrently
@@ -1265,7 +1247,7 @@ async def on_ready():
 
         try:
             # Check if we have cached data first
-            if "total" in client.cached_embeds and hasattr(client.cached_embeds["total"], '_cache_time'):
+            if "total" in client.cached_embeds:
                 # Use cached data to respond quickly, then update in background
                 embed = client.cached_embeds["total"]
                 embed.timestamp = datetime.now()
@@ -1287,8 +1269,8 @@ async def on_ready():
                     # Set proper timestamp for the embed
                     if isinstance(embed_or_error, discord.Embed):
                         embed_or_error.timestamp = datetime.now()
-                        # Store cache time as a custom attribute
-                        setattr(embed_or_error, '_cache_time', time.time())
+                        # Store embed in cache without setting attribute directly
+                        client.cached_embeds["total"] = embed_or_error
 
                     # Create view with buttons
                     view = HighscoresView(client, client.cached_embeds)
@@ -1316,8 +1298,8 @@ async def on_ready():
                 # Set proper timestamp for the embed
                 if isinstance(embed_or_error, discord.Embed):
                     embed_or_error.timestamp = datetime.now()
-                    # Store cache time as a custom attribute
-                    setattr(embed_or_error, '_cache_time', time.time())
+                    # Store in cache without custom attribute
+                    client.cached_embeds["total"] = embed_or_error
 
                 # Create a new message with refreshed highscores
                 view = HighscoresView(client, client.cached_embeds, active_category="skills")
@@ -1374,19 +1356,17 @@ async def on_ready():
 # Preload categories to improve performance
 async def preload_categories(bot):
     print("Preloading common highscore categories...")
-    current_time = time.time()
 
     # Preload total first
     total_embed = await bot.update_highscores(view_type="total")
     if total_embed and isinstance(total_embed, discord.Embed):
-        setattr(total_embed, '_cache_time', current_time)
+        # Store the embed in cache without setting custom attributes
         bot.cached_embeds["total"] = total_embed
 
     # Preload bosses overview
     try:
         bosses_overview_embed = await bot.create_bosses_overview_embed()
         if bosses_overview_embed and isinstance(bosses_overview_embed, discord.Embed):
-            setattr(bosses_overview_embed, '_cache_time', current_time)
             bot.cached_embeds["bosses_overview"] = bosses_overview_embed
             print("Preloaded bosses overview")
     except Exception as e:
@@ -1403,7 +1383,6 @@ async def preload_categories(bot):
         try:
             embed = await bot.create_single_category_embed(category)
             if embed and isinstance(embed, discord.Embed):
-                setattr(embed, '_cache_time', current_time)
                 bot.cached_embeds[category] = embed
                 print(f"Preloaded {category} highscores")
             await asyncio.sleep(1)  # Small delay to prevent rate limiting
