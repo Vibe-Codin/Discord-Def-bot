@@ -75,9 +75,16 @@ async def fetch_clan_data():
         return None
 
 def build_messages(clan_data):
+    if not clan_data:
+        print("No clan data received")
+        return None, None, None
+        
     # Filter out users with offensive combat stats > 2
     filtered = []
     for player in clan_data:
+        if not isinstance(player, dict):
+            print(f"Invalid player data format: {player}")
+            continue
         valid = True
         for skill in offensive_skills:
             level = player.get("skills", {}).get(skill, {}).get("level", 0)
@@ -134,11 +141,15 @@ def build_messages(clan_data):
 @bot.tree.command(name="clanhighscores", description="Show clan highscores")
 async def clanhighscores(interaction: discord.Interaction):
     await interaction.response.defer()
-    clan_data = await fetch_clan_data()
-    if clan_data is None:
-        await interaction.followup.send("Error fetching clan data.")
-        return
-    msg1, msg2, msg3 = build_messages(clan_data)
+    try:
+        clan_data = await fetch_clan_data()
+        if clan_data is None:
+            await interaction.followup.send("Error fetching clan data. Please try again later.")
+            return
+        msg1, msg2, msg3 = build_messages(clan_data)
+        if msg1 is None or msg2 is None or msg3 is None:
+            await interaction.followup.send("Error processing clan data. Please try again later.")
+            return
     channel = interaction.channel
     if highscore_messages["msg1"] is None:
         highscore_messages["msg1"] = await channel.send(msg1)
