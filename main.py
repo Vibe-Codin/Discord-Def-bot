@@ -61,9 +61,16 @@ async def fetch_clan_data():
                         print(f"Error response: {error_text}")
                         return None
                     try:
+                        content_type = resp.headers.get('Content-Type', '')
+                        print(f"Response content type: {content_type}")
+                        text_data = await resp.text()
+                        print(f"Raw response: {text_data[:200]}...")  # Print first 200 chars
                         data = await resp.json()
-                        if not data or 'players' not in data:
-                            print("Invalid data format received from API")
+                        if not data:
+                            print("Empty data received from API")
+                            return None
+                        if 'players' not in data:
+                            print(f"No players field in data. Keys: {data.keys()}")
                             return None
                         print(f"Successfully fetched data for {len(data['players'])} members")
                         return data['players']
