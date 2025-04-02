@@ -65,24 +65,43 @@ class HighscoresBot(discord.Client):
             top_10_text = "Top 10 by Total Level\n"
             for i, entry in enumerate(overall_hiscores[:10], 1):
                 player_name = entry['player']['displayName']
-                # Get the experience value
-                exp = entry['data'].get('experience', 0)
                 
-                # Calculate total level by summing all skill levels
-                skill_levels = []
-                # Check if skills data is available
-                if 'skills' in entry['data']:
-                    # Get all skill levels except overall
-                    for skill, data in entry['data']['skills'].items():
-                        if skill != 'overall' and 'level' in data:
-                            skill_levels.append(data['level'])
+                # Initialize variables
+                total_level = 0
+                total_exp = 0
                 
-                # Calculate the sum of all skill levels
-                total_level = sum(skill_levels) if skill_levels else 0
+                # Check for skills data to calculate total level
+                if 'data' in entry and 'skills' in entry['data']:
+                    skills_data = entry['data']['skills']
+                    
+                    # Try to get total level from the 'overall' skill if available
+                    if 'overall' in skills_data and 'level' in skills_data['overall']:
+                        total_level = skills_data['overall']['level']
+                        total_exp = skills_data['overall'].get('experience', 0)
+                    else:
+                        # Calculate total level manually from each skill
+                        skill_levels = []
+                        for skill, data in skills_data.items():
+                            if skill != 'overall' and 'level' in data:
+                                skill_levels.append(data['level'])
+                                total_exp += data.get('experience', 0)
+                        
+                        total_level = sum(skill_levels) if skill_levels else 0
                 
-                top_10_text += f"{i}. {player_name} | Lvl: {total_level} | XP: {exp:,}\n"
+                # Fallback to overall data if available and skills data wasn't
+                if total_level == 0 and 'data' in entry:
+                    total_level = entry['data'].get('level', 0)
+                    total_exp = entry['data'].get('experience', 0)
+                
+                top_10_text += f"{i}. {player_name} | Lvl: {total_level} | XP: {total_exp:,}\n"
             
             embed.add_field(name="", value=top_10_text, inline=False)
+            
+            # Print the entire payload for debugging one entry (only once)
+            if overall_hiscores and len(overall_hiscores) > 0:
+                # Print structure of the first entry for debugging
+                print(f"Debug - Structure of first entry in overall_hiscores:")
+                print(json.dumps(overall_hiscores[0], indent=2))
             
             # Get hiscores for individual skills
             skills = ['attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic']
@@ -94,11 +113,24 @@ class HighscoresBot(discord.Client):
                     # Only get top 5 for each skill to avoid making the message too long
                     for i, entry in enumerate(skill_hiscores[:5], 1):
                         player_name = entry['player']['displayName']
+                        
+                        # For individual skills, look for the level in the correct structure
+                        skill_level = 0
+                        exp = 0
+                        
+                        # Navigate through the correct data structure
+                        if 'data' in entry:
+                            data = entry['data']
+                            if 'skills' in data and skill in data['skills']:
+                                skill_data = data['skills'][skill]
+                                skill_level = skill_data.get('level', 0)
+                                exp = skill_data.get('experience', 0)
+                            elif 'level' in data:  # Direct level data (old structure)
+                                skill_level = data.get('level', 0)
+                                exp = data.get('experience', 0)
+                        
                         # Only include players who actually have levels in this skill
-                        if entry['data'].get('experience', 0) > 0:
-                            # For individual skills, the level is typically 1-99
-                            skill_level = entry['data'].get('level', 0)
-                            exp = entry['data'].get('experience', 0)
+                        if exp > 0:
                             skill_text += f"{i}. {player_name} | Lvl: {skill_level} | XP: {exp:,}\n"
                     
                     if skill_text:  # Only add field if there are players with levels
@@ -116,14 +148,19 @@ class HighscoresBot(discord.Client):
         
         if message.content.lower() == '!refresh' or message.content.lower() == '/clanhighscores':
             await message.channel.send("Refreshing highscores... Please wait a moment.")
+            print(f"DEBUG: Received command: {message.content}")
+            
             embed_or_error = await self.update_highscores(message)
             
             if isinstance(embed_or_error, str):
+                print(f"DEBUG: Error returned: {embed_or_error}")
                 await message.channel.send(f"⚠️ {embed_or_error}")
             else:
+                print("DEBUG: Successfully created embed, sending to channel")
                 # Always send a new message with the updated highscores
                 new_message = await message.channel.send(embed=embed_or_error)
                 self.last_message = new_message
+                print("DEBUG: Message sent successfully")
 
 intents = discord.Intents.default()
 intents.message_content = True
