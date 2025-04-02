@@ -42,37 +42,84 @@ async def fetch_clan_data():
         'User-Agent': 'OSRS-Clan-Discord-Bot/1.0'
     }
 
-    # Main endpoint to get hiscores data
-    hiscores_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores"
+    # Main endpoint to get hiscores data - adding 'overall' as the default metric
+    hiscores_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores?metric=overall"
 
     try:
         print(f"Requesting hiscores from: {hiscores_url}")
         async with aiohttp.ClientSession() as session:
-            async with session.get(hiscores_url, headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    print(f"Successfully fetched hiscores data with {len(data)} entries")
-                    if len(data) > 0:
-                        print(f"Sample player data: {json.dumps(data[0], indent=2)[:200]}...")
-                    return data
-                else:
-                    print(f"Failed to fetch clan data: {response.status}")
-                    print(await response.text())
+            # First get the members list from the group details
+            group_details_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+            async with session.get(group_details_url, headers=headers) as group_response:
+                if group_response.status != 200:
+                    print(f"Failed to fetch group details: {group_response.status}")
+                    print(await group_response.text())
                     return None
+
+                group_data = await group_response.json()
+
+                if 'memberships' not in group_data:
+                    print("No memberships found in group data")
+                    return None
+
+                # Extract member usernames 
+                member_usernames = [membership.get('player', {}).get('username') 
+                                    for membership in group_data.get('memberships', [])
+                                    if membership.get('player', {}).get('username')]
+
+                print(f"Found {len(member_usernames)} members in the clan")
+
+                # Fetch player details for each member
+                player_data = []
+                for username in member_usernames:
+                    player_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
+                    async with session.get(player_url, headers=headers) as player_response:
+                        if player_response.status == 200:
+                            player = await player_response.json()
+                            player_data.append(player)
+                        else:
+                            print(f"Failed to fetch data for player {username}: {player_response.status}")
+
+                print(f"Successfully fetched data for {len(player_data)} players")
+                if len(player_data) > 0:
+                    print(f"Sample player data: {json.dumps(player_data[0], indent=2)[:200]}...")
+                return player_data
     except Exception as e:
         print(f"Error fetching clan data: {e}")
 
         # Fallback to requests if aiohttp fails
         try:
             print("Falling back to requests library")
-            response = requests.get(hiscores_url, headers=headers, timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                print(f"Successfully fetched hiscores data with {len(data)} entries")
-                return data
-            else:
-                print(f"Fallback request failed: {response.status_code}")
+            group_details_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+            group_response = requests.get(group_details_url, headers=headers, timeout=15)
+
+            if group_response.status_code != 200:
+                print(f"Fallback: Failed to fetch group details: {group_response.status_code}")
                 return None
+
+            group_data = group_response.json()
+
+            if 'memberships' not in group_data:
+                print("Fallback: No memberships found in group data")
+                return None
+
+            # Extract member usernames
+            member_usernames = [membership.get('player', {}).get('username') 
+                                for membership in group_data.get('memberships', [])
+                                if membership.get('player', {}).get('username')]
+
+            # Fetch player details for each member
+            player_data = []
+            for username in member_usernames:
+                player_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
+                player_response = requests.get(player_url, headers=headers, timeout=15)
+                if player_response.status_code == 200:
+                    player = player_response.json()
+                    player_data.append(player)
+
+            print(f"Fallback: Successfully fetched data for {len(player_data)} players")
+            return player_data
+
         except Exception as e2:
             print(f"Fallback request also failed: {e2}")
             return None
