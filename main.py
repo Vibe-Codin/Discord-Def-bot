@@ -164,19 +164,12 @@ async def clanhighscores(interaction: discord.Interaction):
     except Exception as e:
         print(f"Error in clanhighscores command: {e}")
         await interaction.followup.send("An error occurred while updating highscores.")
-    if highscore_messages["msg1"] is None:
-        highscore_messages["msg1"] = await channel.send(msg1)
-        highscore_messages["msg2"] = await channel.send(msg2)
-        highscore_messages["msg3"] = await channel.send(msg3)
-    else:
-        await highscore_messages["msg1"].edit(content=msg1)
-        await highscore_messages["msg2"].edit(content=msg2)
-        await highscore_messages["msg3"].edit(content=msg3)
-    await interaction.followup.send("Highscores updated!")
+        return
 
 @tasks.loop(hours=24)
 async def update_highscores_task():
-    channel = bot.get_channel(CHANNEL_ID)
+    try:
+        channel = bot.get_channel(CHANNEL_ID)
     if channel is None:
         print("Channel not found.")
         return
@@ -196,6 +189,8 @@ async def update_highscores_task():
             await highscore_messages["msg3"].edit(content=msg3)
         except Exception as e:
             print("Error editing messages: ", e)
+    except Exception as e:
+        print(f"Error in update task: {e}")
 
 @bot.event
 async def on_ready():
