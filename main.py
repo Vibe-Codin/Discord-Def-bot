@@ -176,11 +176,17 @@ class WOMClient:
         return None
         
     async def get_player_details(self, username):
-        url = f"{self.base_url}/players/{username}"
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.json()
-        return None
+        try:
+            url = f"{self.base_url}/players/{username}"
+            response = requests.get(url)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"API error for player {username}: Status code {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"Error fetching player details for {username}: {str(e)}")
+            return None
 
 # Discord bot
 class HighscoresBot(discord.Client):
@@ -195,30 +201,44 @@ class HighscoresBot(discord.Client):
         print(f'{self.user} has connected to Discord!')
 
     async def is_valid_player(self, player_name):
-        # Get individual player details for combat skill levels
-        player_details = await self.wom_client.get_player_details(player_name)
-        if not player_details or 'data' not in player_details or 'skills' not in player_details['data']:
-            return True  # If we can't check, assume they're valid
-        
-        skills = player_details['data']['skills']
-        
-        # Check attack level
-        if 'attack' in skills and skills['attack'].get('level', 0) > 2:
-            return False
+        try:
+            # Get individual player details for combat skill levels
+            player_details = await self.wom_client.get_player_details(player_name)
+            if not player_details or 'data' not in player_details or 'skills' not in player_details['data']:
+                print(f"Warning: Couldn't fetch details for player {player_name}, skipping validation")
+                return False  # If we can't check, assume they're invalid to be safe
             
-        # Check strength level
-        if 'strength' in skills and skills['strength'].get('level', 0) > 2:
-            return False
+            skills = player_details['data']['skills']
             
-        # Check magic level
-        if 'magic' in skills and skills['magic'].get('level', 0) > 2:
-            return False
+            # Debug output to check levels
+            if 'attack' in skills and 'strength' in skills and 'magic' in skills and 'ranged' in skills:
+                print(f"Player {player_name} combat levels - Attack: {skills['attack'].get('level', 0)}, Strength: {skills['strength'].get('level', 0)}, Magic: {skills['magic'].get('level', 0)}, Ranged: {skills['ranged'].get('level', 0)}")
             
-        # Check ranged level
-        if 'ranged' in skills and skills['ranged'].get('level', 0) > 2:
-            return False
-            
-        return True  # If all combat skills are 2 or less, or not found
+            # Check attack level
+            if 'attack' in skills and skills['attack'].get('level', 0) > 2:
+                #print(f"Player {player_name} excluded: Attack level {skills['attack'].get('level', 0)} > 2")
+                return False
+                
+            # Check strength level
+            if 'strength' in skills and skills['strength'].get('level', 0) > 2:
+                #print(f"Player {player_name} excluded: Strength level {skills['strength'].get('level', 0)} > 2")
+                return False
+                
+            # Check magic level
+            if 'magic' in skills and skills['magic'].get('level', 0) > 2:
+                #print(f"Player {player_name} excluded: Magic level {skills['magic'].get('level', 0)} > 2")
+                return False
+                
+            # Check ranged level
+            if 'ranged' in skills and skills['ranged'].get('level', 0) > 2:
+                #print(f"Player {player_name} excluded: Ranged level {skills['ranged'].get('level', 0)} > 2")
+                return False
+                
+            print(f"Player {player_name} validated - meets requirements (≤ 2 in combat skills)")
+            return True  # If all combat skills are 2 or less
+        except Exception as e:
+            print(f"Error validating player {player_name}: {str(e)}")
+            return False  # If there's an error, assume they're invalid to be safe
         
     async def create_total_level_embed(self, group_name):
         # Get overall hiscores for total level ranking
@@ -241,6 +261,7 @@ class HighscoresBot(discord.Client):
             
             # Check if player meets combat level criteria
             if not await self.is_valid_player(player_name):
+                print(f"Skipping {player_name} for total level highscore - over combat skill limit")
                 continue  # Skip this player if they have more than 2 in any combat skill
 
             # Use the level field directly from the API for total level
@@ -320,6 +341,7 @@ class HighscoresBot(discord.Client):
                     
                     # Check if player meets combat level criteria
                     if not await self.is_valid_player(player_name):
+                        print(f"Skipping {player_name} for {skill} highscore - over combat skill limit")
                         continue  # Skip this player
                         
                     # For individual skills, get level and experience directly from the data object
@@ -407,6 +429,7 @@ class HighscoresBot(discord.Client):
                         
                         # Check if player meets combat level criteria
                         if not await self.is_valid_player(player_name):
+                            print(f"Skipping {player_name} for {boss} highscore - over combat skill limit")
                             continue  # Skip this player
                             
                         # Get the kill count
