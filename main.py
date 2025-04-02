@@ -650,7 +650,6 @@ class HighscoresBot(discord.Client):
 
         # Process all players to get total levels and experience
         processed_players = []
-        defence_ranking_players = []  # New list for defence clan ranking
         valid_player_count = 0
         excluded_count = 0
         rate_limited_count = 0
@@ -668,33 +667,6 @@ class HighscoresBot(discord.Client):
 
         # Track how many players we've fully processed
         players_processed = 0
-
-        # Get metrics for defence and slayer
-        defence_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric='defence')
-        slayer_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric='slayer')
-        
-        # Create lookup dictionaries for quick access to defence and slayer levels
-        defence_levels = {}
-        slayer_levels = {}
-        
-        # Process defence hiscores
-        if defence_hiscores:
-            for entry in defence_hiscores:
-                if 'player' in entry and 'displayName' in entry['player'] and 'data' in entry and 'level' in entry['data']:
-                    player_name = entry['player']['displayName']
-                    defence_levels[player_name] = entry['data']['level']
-        
-        # Process slayer hiscores
-        if slayer_hiscores:
-            for entry in slayer_hiscores:
-                if 'player' in entry and 'displayName' in entry['player'] and 'data' in entry and 'level' in entry['data']:
-                    player_name = entry['player']['displayName']
-                    slayer_levels[player_name] = entry['data']['level']
-        
-        # Maximum possible levels for calculating percentages
-        MAX_DEFENCE_LEVEL = 99
-        MAX_SLAYER_LEVEL = 99
-        MAX_TOTAL_LEVEL = 2277 - 99  # Total level excluding max slayer (99)
 
         for batch_index, batch in enumerate(batches):
             # Create tasks for validating all players in the batch concurrently
@@ -731,39 +703,10 @@ class HighscoresBot(discord.Client):
                     if total_level == 0 and 'player' in entry and 'exp' in entry['player']:
                         total_exp = entry['player']['exp']
 
-                    # Get defence and slayer levels for this player
-                    defence_level = defence_levels.get(player_name, 1)  # Default to 1 if not found
-                    slayer_level = slayer_levels.get(player_name, 1)  # Default to 1 if not found
-                    
-                    # Calculate the adjusted total level (excluding slayer)
-                    adjusted_total_level = max(1, total_level - slayer_level)
-                    
-                    # Calculate percentage completions
-                    defence_pct = min(1.0, defence_level / MAX_DEFENCE_LEVEL)
-                    total_level_pct = min(1.0, adjusted_total_level / MAX_TOTAL_LEVEL)
-                    slayer_pct = min(1.0, slayer_level / MAX_SLAYER_LEVEL)
-                    
-                    # Calculate weighted score based on the formula
-                    weighted_score = (
-                        (defence_pct * 0.55) +      # Defence level: 55%
-                        (total_level_pct * 0.35) +  # Total level (excluding slayer): 35%
-                        (slayer_pct * 0.10)         # Slayer level: 10%
-                    ) * 100  # Convert to percentage
-                    
                     processed_players.append({
                         'name': player_name,
                         'total_level': total_level,
                         'total_exp': total_exp
-                    })
-                    
-                    # Add to defence ranking list
-                    defence_ranking_players.append({
-                        'name': player_name,
-                        'defence_level': defence_level,
-                        'slayer_level': slayer_level,
-                        'total_level': total_level,
-                        'adjusted_total_level': adjusted_total_level,
-                        'weighted_score': weighted_score
                     })
 
                 except Exception as e:
@@ -806,20 +749,9 @@ class HighscoresBot(discord.Client):
                 top_exp_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
         else:
             top_exp_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
-            
-        # Add the top 10 by Defence Clan Ranking
-        defence_ranking_text = ""
-        if defence_ranking_players:
-            # Sort by weighted score (descending)
-            ranking_sorted = sorted(defence_ranking_players, key=lambda x: -x['weighted_score'])
-            for i, player in enumerate(ranking_sorted[:10], 1):
-                defence_ranking_text += f"{i}. {player['name']} | Score: {player['weighted_score']:.2f}% | Def: {player['defence_level']} | Slay: {player['slayer_level']}\n"
-        else:
-            defence_ranking_text = "No players found meeting the criteria for Defence Clan Ranking"
 
         embed.add_field(name="Top 15 Players by Total Level", value=top_level_text, inline=False)
         embed.add_field(name="Top 15 Players by Total Experience", value=top_exp_text, inline=False)
-        embed.add_field(name="Defence Clan Ranking (Top 10)", value=defence_ranking_text, inline=False)
         print(f"Filtering stats: {valid_player_count} players included, {excluded_count} excluded")
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')} | {valid_player_count} valid players")
 
