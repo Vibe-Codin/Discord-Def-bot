@@ -5,7 +5,7 @@ import aiohttp
 import os
 
 # Set your Wise Old Man clan ID, channel ID, and base URL
-CLAN_ID = "2763"  # OSRS Defence clan ID
+CLAN_ID = "2277"  # OSRS Defence clan ID
 WISE_OLD_MAN_BASE_URL = "https://api.wiseoldman.net/v3"  # Updated to v3
 CHANNEL_ID = 969159797058437170  # OSRS Defence Discord channel
 TOKEN = os.getenv('DISCORD_TOKEN', '')  # Get from environment variable
@@ -54,7 +54,7 @@ async def fetch_clan_data():
                     return None
                 
                 # Now fetch the members stats
-                url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
+                url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats"
                 print(f"Fetching members data from: {url}")
                 async with session.get(url, headers=headers) as resp:
                     if resp.status != 200:
@@ -234,9 +234,13 @@ async def testmembers(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}!")
-    await bot.tree.sync()
+    try:
+        await bot.tree.sync()
+        print("Successfully synced application commands")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
     update_highscores_task.start()
-    print("Bot is ready! Try !ping to test.")
+    print("Bot is ready! Try !ping to test or /testapi to check API connection")
 
 if __name__ == "__main__":
     if not TOKEN:
