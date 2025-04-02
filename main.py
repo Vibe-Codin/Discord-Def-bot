@@ -5,6 +5,7 @@ import asyncio
 import json
 import requests
 import time
+import random
 from datetime import datetime
 from discord import errors as discord_errors
 import concurrent.futures
@@ -184,7 +185,6 @@ class BossesDropdown(discord.ui.Select):
             discord.SelectOption(label="Barrows Chests", value="barrows_chests", description="Barrows Chests highscores"),
             discord.SelectOption(label="Bryophyta", value="bryophyta", description="Bryophyta boss highscores"),
             discord.SelectOption(label="Callisto", value="callisto", description="Callisto boss highscores"),
-            discord.SelectOption(label="Calvarion", value="calvarion", description="Calvarion boss highscores"),
             discord.SelectOption(label="Cerberus", value="cerberus", description="Cerberus boss highscores"),
             discord.SelectOption(label="Chambers of Xeric", value="chambers_of_xeric", description="Chambers of Xeric boss highscores"),
             discord.SelectOption(label="Chaos Elemental", value="chaos_elemental", description="Chaos Elemental highscores"),
@@ -284,10 +284,11 @@ class WOMClient:
 
         # Check if we have a cached response and it's still valid
         if cache_key in self.cache and current_time < self.cache_expiry.get(cache_key, 0):
+            print(f"Using cached data for {cache_key} (age: {(current_time - (self.cache_expiry.get(cache_key, 0) - self.CACHE_DURATION))/60:.1f} minutes)")
             return self.cache[cache_key]
 
         # Make the API request with retry logic for rate limits
-        max_retries = 3
+        max_retries = 5  # Increased max retries
         retry_count = 0
         
         while retry_count <= max_retries:
@@ -301,20 +302,31 @@ class WOMClient:
                     self.cache_expiry[cache_key] = current_time + self.CACHE_DURATION
                     return data
                 elif response.status_code == 429:
-                    # Rate limited - implement exponential backoff
-                    wait_time = 1.5 * (2 ** retry_count)  # 1.5, 3, 6, 12 seconds
-                    print(f"Rate limited (429) for {url}, waiting {wait_time}s before retry ({retry_count+1}/{max_retries+1})")
+                    # Rate limited - implement exponential backoff with jitter
+                    base_wait_time = 2.0 * (2 ** retry_count)  # 2, 4, 8, 16, 32 seconds
+                    # Add jitter (±20%)
+                    jitter = base_wait_time * 0.2 * (2 * random.random() - 1)
+                    wait_time = base_wait_time + jitter
+                    print(f"Rate limited (429) for {url}, waiting {wait_time:.1f}s before retry ({retry_count+1}/{max_retries+1})")
                     await asyncio.sleep(wait_time)
                     retry_count += 1
                 else:
                     print(f"API returned status code {response.status_code} for {url}")
+                    # Check if we have cached data we can use instead
+                    if cache_key in self.cache:
+                        print(f"Using older cached data for {cache_key} as fallback")
+                        return self.cache[cache_key]
                     return None
             except Exception as e:
                 print(f"API request error for {url}: {str(e)}")
                 retry_count += 1
                 if retry_count <= max_retries:
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(2.0)  # Increased wait time
                 else:
+                    # Check if we have cached data we can use instead
+                    if cache_key in self.cache:
+                        print(f"Using older cached data for {cache_key} as fallback after error")
+                        return self.cache[cache_key]
                     return None
         
         # If we've exhausted all retries
@@ -511,7 +523,10 @@ class HighscoresBot(discord.Client):
         # Process up to 30 players to get at least 20 valid ones
         max_players_to_check = min(30, len(overall_hiscores))
         batches = [overall_hiscores[i:i+batch_size] for i in range(0, max_players_to_check, batch_size)]
-
+        
+        # Track how many players we've fully processed
+        players_processed = 0
+        
         for batch_index, batch in enumerate(batches):
             # Create tasks for validating all players in the batch concurrently
             validation_tasks = []
@@ -522,6 +537,7 @@ class HighscoresBot(discord.Client):
             # Process results as they complete
             for player_name, entry, validation_task in validation_tasks:
                 try:
+                    players_processed += 1
                     is_valid = await validation_task
                     
                     if not is_valid:
@@ -564,6 +580,8 @@ class HighscoresBot(discord.Client):
             delay = min(1.0 + (batch_index * 0.5), 5.0)  # Gradually increase delay up to 5 seconds
             print(f"Waiting {delay:.1f}s before next batch to avoid rate limits...")
             await asyncio.sleep(delay)
+            
+        print(f"Processed a total of {players_processed} players out of requested {max_players_to_check}")
 
         # Print the actual number of players we processed vs filtered
         print(f"Processed {len(processed_players)} valid players from {max_players_to_check} total checked")
@@ -1025,7 +1043,7 @@ class HighscoresBot(discord.Client):
             # All bosses to check - specific list of only supported bosses
             all_bosses = [
                 'amoxliatl', 'barrows_chests', 'bryophyta', 'callisto', 
-                'calvarion', 'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
+                'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
                 'chaos_elemental', 'chaos_fanatic', 'commander_zilyana', 'corporeal_beast', 
                 'crazy_archaeologist', 'deranged_archaeologist', 'giant_mole', 'hespori', 
                 'kalphite_queen', 'king_black_dragon', 'kril_tsutsaroth', 'lunar_chests', 
