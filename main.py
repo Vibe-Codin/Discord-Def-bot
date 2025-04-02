@@ -57,6 +57,7 @@ async def fetch_clan_data():
             # First fetch group details to verify we have a valid group
             response = requests.get(group_endpoint, headers=headers, timeout=15)
             print(f"Group details response status: {response.status_code}")
+            print(f"Group details response text: {response.text[:200]}...") #Added debug info
 
             if response.status_code == 200 and response.text.strip():
                 try:
@@ -81,6 +82,9 @@ async def fetch_clan_data():
                         try:
                             hiscores_data = hiscores_response.json()
                             print(f"Found hiscores data with {len(hiscores_data)} entries")
+                            # Print sample data structure to help with debugging
+                            if len(hiscores_data) > 0:
+                                print(f"Sample hiscores data: {json.dumps(hiscores_data[0], indent=2)[:200]}...")
                             return hiscores_data
                         except json.JSONDecodeError as e:
                             print(f"Error decoding hiscores JSON: {e}")
@@ -200,6 +204,7 @@ async def fetch_clan_data():
             try:
                 response = requests.get(url, headers=headers, timeout=10)
                 print(f"Direct request to {url}: status {response.status_code}")
+                print(f"Direct request to {url}: text {response.text[:200]}...") #Added debug info
 
                 if response.status_code == 200 and response.text:
                     try:
@@ -701,8 +706,8 @@ async def testgroup(interaction: discord.Interaction):
 
                             # 3. Get group hiscores
                             hiscores_response = requests.get(hiscores_url, headers=headers, timeout=15)
-                            if hiscores_response.status_code == 20:
-                            hiscores_data = hiscores_response.json()
+                            if hiscores_response.status_code == 200:
+                                hiscores_data = hiscores_response.json()
                                 results.append(f"Found {len(hiscores_data)} hiscores entries")
 
                                 if len(hiscores_data) > 0:
