@@ -6,7 +6,7 @@ import json
 
 # Set your Wise Old Man clan ID, channel ID, and base URL
 CLAN_ID = "2763"  # OSRS Defence clan ID
-WISE_OLD_MAN_BASE_URL = "https://api.wiseoldman.net/v3"  # Updated to v3
+WISE_OLD_MAN_BASE_URL = "https://api.wiseoldman.net/v2"  # Try v2 version
 CHANNEL_ID = 969159797058437170  # OSRS Defence Discord channel
 TOKEN = os.getenv('DISCORD_TOKEN', '')  # Get from environment variable
 
@@ -44,7 +44,10 @@ async def fetch_clan_data():
 
         # Try different API endpoints based on documentation
         # First, get the group details to verify we can access the correct clan
+        # Try different name formats for the group
         group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"
+        alt_group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence"
+        print(f"Also trying alternative endpoint: {alt_group_endpoint}")
         # Also try a fallback to the base URL without version
         base_endpoint = "https://api.wiseoldman.net/groups/2763"
         print(f"Also trying fallback endpoint: {base_endpoint}")
@@ -54,6 +57,11 @@ async def fetch_clan_data():
         try:
             # First try to use requests library directly to reduce any potential issues
             response = requests.get(group_endpoint, headers=headers, timeout=15)
+            
+            # If first attempt fails, try with alternative name format
+            if response.status_code != 200 or not response.text.strip():
+                print("First attempt failed, trying alternative name format")
+                response = requests.get(alt_group_endpoint, headers=headers, timeout=15)
             print(f"Group details response status: {response.status_code}")
 
             if response.status_code == 200:
@@ -81,6 +89,22 @@ async def fetch_clan_data():
                         print(f"Error decoding group JSON: {e}")
                 else:
                     print(f"Received empty response from {group_endpoint}")
+                    
+                    # Try directly with the clan ID as fallback
+                    print("Trying direct clan ID approach as fallback")
+                    members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
+                    members_response = requests.get(members_endpoint, headers=headers, timeout=15)
+                    
+                    if members_response.status_code == 200 and members_response.text.strip():
+                        try:
+                            members_data = members_response.json()
+                            print(f"Found {len(members_data)} members directly with ID")
+                            return members_data
+                        except json.JSONDecodeError as e:
+                            print(f"Error decoding members JSON: {e}")
+                    else:
+                        print(f"Direct ID approach also failed: {members_response.status_code}")
+                        print(f"Response text: {members_response.text[:100] if members_response.text else 'Empty'}")
         except Exception as e:
             print(f"Error with direct request: {e}")
 
