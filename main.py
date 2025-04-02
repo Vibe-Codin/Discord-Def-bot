@@ -241,9 +241,9 @@ class HighscoresBot(discord.Client):
         return embed
 
     async def create_skills_embed(self, group_name, part=1):
-        # All skills
+        # All skills, excluding Attack, Strength, Magic, and Ranged
         all_skills = [
-            'attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic',
+            'defence', 'hitpoints', 'prayer', 
             'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting',
             'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',
             'farming', 'runecraft', 'hunter', 'construction'
