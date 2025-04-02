@@ -637,7 +637,7 @@ class HighscoresBot(discord.Client):
                     player_name = entry['player']['displayName']
                     validation_tasks.append((entry, self.is_valid_player(player_name)))
 
-                for entry, validation_task in validation_tasks:
+                for entry, validation_task in validationtasks:
                     is_valid = await validation_task
                     if is_valid:
                         # Extract player info
@@ -1248,19 +1248,19 @@ async def on_ready():
     async def clanhighscores(interaction):
         # Defer with ephemeral=False to show loading to everyone
         await interaction.response.defer(thinking=True, ephemeral=False)
-        
+
         try:
             # Check if we have cached data first
             if "total" in client.cached_embeds and hasattr(client.cached_embeds["total"], '_cache_time'):
                 # Use cached data to respond quickly, then update in background
                 embed = client.cached_embeds["total"]
                 embed.timestamp = datetime.now()
-                
+
                 # Create view with buttons
                 view = HighscoresView(client, client.cached_embeds)
                 message = await interaction.followup.send(embed=embed, view=view)
                 client.last_message = message
-                
+
                 # Update cache in background
                 asyncio.create_task(client.update_highscores(force_refresh=True))
             else:
@@ -1291,7 +1291,7 @@ async def on_ready():
         try:
             # Send a quick response to avoid timeout
             await interaction.followup.send("Refreshing highscores...", ephemeral=True)
-            
+
             # Force refresh the cache in background
             embed_or_error = await client.update_highscores(force_refresh=True)
 
@@ -1305,7 +1305,7 @@ async def on_ready():
 
                 # Create a new message with refreshed highscores
                 view = HighscoresView(client, client.cached_embeds, active_category="skills")
-                
+
                 # Send a new message to the channel
                 channel = interaction.channel
                 if channel:
@@ -1358,7 +1358,7 @@ async def preload_categories(bot):
     current_time = time.time()
     # Preload total first
     total_embed = await bot.update_highscores(view_type="total")
-    total_embed._cache_time = current_time
+    total_embed._cache_time = currenttime
     bot.cached_embeds["total"] = total_embed
 
     # Preload bosses overview
