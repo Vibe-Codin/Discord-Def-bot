@@ -462,6 +462,20 @@ class RefreshButton(discord.ui.View):
 
             print(f"Refresh button clicked by {interaction.user}")
 
+            # Check permissions first
+            channel = interaction.channel
+            bot_member = channel.guild.get_member(self.bot.user.id)
+            permissions = channel.permissions_for(bot_member)
+
+            if not permissions.send_messages or not permissions.embed_links or not permissions.manage_messages:
+                await interaction.followup.send(
+                    "❌ I don't have enough permissions in this channel. Please make sure I have 'Send Messages', 'Embed Links', and 'Manage Messages' permissions.",
+                    ephemeral=True
+                )
+                print(f"Missing required permissions in channel {channel.id}")
+                print(f"Bot permissions: Send Messages: {permissions.send_messages}, Embed Links: {permissions.embed_links}, Manage Messages: {permissions.manage_messages}")
+                return
+
             try:
                 clan_data = await fetch_clan_data()
 
@@ -483,19 +497,28 @@ class RefreshButton(discord.ui.View):
                     # Get the original message via the message that triggered this interaction
                     message = interaction.message
                     if message:
-                        await message.edit(embed=embed, view=view)
-                        highscore_messages["main"] = message
-
                         try:
-                            await interaction.followup.send("✅ Highscores updated successfully!", ephemeral=True)
-                        except discord.NotFound:
-                            # If interaction expires, try with a new message
-                            await interaction.channel.send("✅ Highscores updated successfully!")
+                            await message.edit(embed=embed, view=view)
+                            highscore_messages["main"] = message
+                            print("Successfully edited existing message")
+
+                            try:
+                                await interaction.followup.send("✅ Highscores updated successfully!", ephemeral=True)
+                            except discord.NotFound:
+                                # If interaction expires, try with a new message
+                                await interaction.channel.send("✅ Highscores updated successfully!")
+                        except discord.Forbidden:
+                            print("Permission error when editing message, sending a new one")
+                            # If we can't edit due to permissions, send a new message
+                            new_message = await channel.send(embed=embed, view=view)
+                            highscore_messages["main"] = new_message
+                            await interaction.followup.send("✅ Created new highscores message (couldn't edit the original)!", ephemeral=True)
                     else:
                         # Fallback if we can't get the interaction message
                         channel = interaction.channel
                         new_message = await channel.send(embed=embed, view=view)
                         highscore_messages["main"] = new_message
+                        print("Created new message as fallback")
 
                         try:
                             await interaction.followup.send("✅ Created new highscores message!", ephemeral=True)
@@ -710,10 +733,10 @@ async def clanhighscores(interaction: discord.Interaction):
         channel = interaction.channel
         bot_member = channel.guild.get_member(bot.user.id)
         permissions = channel.permissions_for(bot_member)
-        
+
         if not permissions.send_messages or not permissions.embed_links:
             await interaction.followup.send(
-                "❌ I don't have enough permissions in this channel. Please make sure I have 'Send Messages' and 'Embed Links' permissions.",
+                "❌ I don'thave enough permissions in this channel. Please make sure I have 'Send Messages' and 'Embed Links' permissions.",
                 ephemeral=True
             )
             print(f"Missing required permissions in channel {channel.id}")
@@ -798,7 +821,7 @@ async def update_highscores_task():
         # Check permissions first
         bot_member = channel.guild.get_member(bot.user.id)
         permissions = channel.permissions_for(bot_member)
-        
+
         if not permissions.send_messages or not permissions.embed_links:
             print(f"Missing required permissions in channel {CHANNEL_ID}.")
             print(f"Bot needs: Send Messages: {permissions.send_messages}, Embed Links: {permissions.embed_links}")
