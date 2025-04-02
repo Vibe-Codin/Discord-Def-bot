@@ -24,40 +24,45 @@ class HighscoresDropdown(discord.ui.Select):
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
         
-        # Define all skills and bosses as options
+        # Define core skills as options (most important for defence pure builds)
         options = [
             discord.SelectOption(label="Overall", value="total", description="Overall total level highscores"),
             discord.SelectOption(label="Defence", value="defence", description="Defence skill highscores"),
             discord.SelectOption(label="Hitpoints", value="hitpoints", description="Hitpoints skill highscores"),
             discord.SelectOption(label="Prayer", value="prayer", description="Prayer skill highscores"),
+            discord.SelectOption(label="Slayer", value="slayer", description="Slayer skill highscores"),
+        ]
+        
+        # Add secondary skilling options
+        skilling_options = [
             discord.SelectOption(label="Cooking", value="cooking", description="Cooking skill highscores"),
             discord.SelectOption(label="Woodcutting", value="woodcutting", description="Woodcutting skill highscores"),
             discord.SelectOption(label="Fletching", value="fletching", description="Fletching skill highscores"),
             discord.SelectOption(label="Fishing", value="fishing", description="Fishing skill highscores"),
             discord.SelectOption(label="Firemaking", value="firemaking", description="Firemaking skill highscores"),
             discord.SelectOption(label="Crafting", value="crafting", description="Crafting skill highscores"),
-            discord.SelectOption(label="Smithing", value="smithing", description="Smithing skill highscores"),
             discord.SelectOption(label="Mining", value="mining", description="Mining skill highscores"),
-            discord.SelectOption(label="Herblore", value="herblore", description="Herblore skill highscores"),
-            discord.SelectOption(label="Agility", value="agility", description="Agility skill highscores"),
-            discord.SelectOption(label="Thieving", value="thieving", description="Thieving skill highscores"),
-            discord.SelectOption(label="Slayer", value="slayer", description="Slayer skill highscores"),
-            discord.SelectOption(label="Farming", value="farming", description="Farming skill highscores"),
-            discord.SelectOption(label="Runecrafting", value="runecrafting", description="Runecrafting skill highscores"),
-            discord.SelectOption(label="Hunter", value="hunter", description="Hunter skill highscores"),
-            discord.SelectOption(label="Construction", value="construction", description="Construction skill highscores"),
         ]
         
-        # Add top bosses as options (first 5 as there's a 25-option limit in Discord)
+        # Add important PvM boss options (increasing from 5 to 13)
         boss_options = [
             discord.SelectOption(label="Abyssal Sire", value="abyssal_sire", description="Abyssal Sire boss highscores"),
             discord.SelectOption(label="Alchemical Hydra", value="alchemical_hydra", description="Alchemical Hydra boss highscores"),
             discord.SelectOption(label="Chambers of Xeric", value="chambers_of_xeric", description="Chambers of Xeric boss highscores"),
             discord.SelectOption(label="Theatre of Blood", value="theatre_of_blood", description="Theatre of Blood boss highscores"),
-            discord.SelectOption(label="Vorkath", value="vorkath", description="Vorkath boss highscores")
+            discord.SelectOption(label="Vorkath", value="vorkath", description="Vorkath boss highscores"),
+            discord.SelectOption(label="General Graardor", value="general_graardor", description="General Graardor boss highscores"),
+            discord.SelectOption(label="Zulrah", value="zulrah", description="Zulrah boss highscores"),
+            discord.SelectOption(label="Nex", value="nex", description="Nex boss highscores"),
+            discord.SelectOption(label="Nightmare", value="nightmare", description="Nightmare boss highscores"),
+            discord.SelectOption(label="Corrupted Gauntlet", value="the_corrupted_gauntlet", description="Corrupted Gauntlet highscores"),
+            discord.SelectOption(label="Tombs of Amascut", value="tombs_of_amascut", description="Tombs of Amascut highscores"),
+            discord.SelectOption(label="King Black Dragon", value="king_black_dragon", description="King Black Dragon highscores"),
+            discord.SelectOption(label="TzTok-Jad", value="tztok_jad", description="TzTok-Jad highscores"),
         ]
         
-        # Add boss options to the list
+        # Add all options to the list (staying under 25 limit)
+        options.extend(skilling_options)
         options.extend(boss_options)
         
         super().__init__(placeholder="Select a highscore category...", min_values=1, max_values=1, options=options)
@@ -68,21 +73,28 @@ class HighscoresDropdown(discord.ui.Select):
             await interaction.response.defer(ephemeral=True, thinking=True)
             
             selected_value = self.values[0]
+            current_time = time.time()
             
+            # Check if we have a cached embed and if it's still valid (less than 24 hours old)
+            cached_entry = self.cached_embeds.get(selected_value, None)
+            cache_age = 0
+            
+            if cached_entry and hasattr(cached_entry, '_timestamp'):
+                cache_age = current_time - cached_entry._timestamp
+                
             # Check if it's the overall total or a specific skill/boss
-            if selected_value == "total":
-                if "total" in self.cached_embeds:
-                    embed = self.cached_embeds["total"]
-                else:
-                    embed = await self.bot.update_highscores(view_type="total")
-                    self.cached_embeds["total"] = embed
+            if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+                embed = cached_entry
+                print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
+            elif selected_value == "total":
+                embed = await self.bot.update_highscores(view_type="total")
+                embed._timestamp = current_time  # Add timestamp to track age
+                self.cached_embeds["total"] = embed
             else:
                 # For specific skill or boss
-                if selected_value in self.cached_embeds:
-                    embed = self.cached_embeds[selected_value]
-                else:
-                    embed = await self.bot.create_single_category_embed(selected_value)
-                    self.cached_embeds[selected_value] = embed
+                embed = await self.bot.create_single_category_embed(selected_value)
+                embed._timestamp = current_time  # Add timestamp to track age
+                self.cached_embeds[selected_value] = embed
             
             # Create a new HighscoresView with cached embeds to replace the existing view
             new_view = HighscoresView(self.bot, self.cached_embeds)
@@ -90,7 +102,11 @@ class HighscoresDropdown(discord.ui.Select):
             
             # Send a follow-up message that's only visible to the user who clicked
             category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
-            await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+            if cached_entry and cache_age < 86400:
+                time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
+                await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+            else:
+                await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0]}")
         except Exception as e:
@@ -108,7 +124,7 @@ class WOMClient:
         self.session = requests.Session()  # Use a persistent session for connection pooling
         self.cache = {}  # Simple cache for API responses
         self.cache_expiry = {}  # Track when cache entries expire
-        self.CACHE_DURATION = 300  # Cache duration in seconds (5 minutes)
+        self.CACHE_DURATION = 86400  # Cache duration in seconds (24 hours)
 
     async def _get_cached_or_fetch(self, cache_key, url, params=None, timeout=15):
         current_time = time.time()
@@ -684,7 +700,7 @@ class HighscoresBot(discord.Client):
             # Create the embed
             embed = discord.Embed(
                 title=f"{group_name} Highscores - {display_name}",
-                description=f"Top 20 players in {display_name} for {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+                description=f"Top 15 players in {display_name} for {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
                 color=0x3498db,
                 timestamp=datetime.now()
             )
@@ -749,7 +765,7 @@ class HighscoresBot(discord.Client):
                 
                 # Add players to the embed
                 player_list_text = ""
-                for i, player in enumerate(valid_players[:20], 1):
+                for i, player in enumerate(valid_players[:15], 1):
                     player_list_text += f"{i}. {player['name']} | Lvl: {player['level']} | XP: {player['exp']:,}\n"
                 
                 if player_list_text:
@@ -762,7 +778,7 @@ class HighscoresBot(discord.Client):
                 
                 # Add players to the embed
                 player_list_text = ""
-                for i, player in enumerate(valid_players[:20], 1):
+                for i, player in enumerate(valid_players[:15], 1):
                     player_list_text += f"{i}. {player['name']} | KC: {player['kills']:,}\n"
                 
                 if player_list_text:
@@ -920,6 +936,9 @@ client = HighscoresBot(intents=intents)
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
 
+    # Preload common categories in the background
+    asyncio.create_task(preload_categories(client))
+
     # Find a channel to post initial highscores
     for guild in client.guilds:
         for channel in guild.text_channels:
@@ -934,6 +953,34 @@ async def on_ready():
                     client.last_message = message
                 break
         break
+
+# Preload categories to improve performance
+async def preload_categories(bot):
+    print("Preloading common highscore categories...")
+    current_time = time.time()
+    # Preload total first
+    total_embed = await bot.update_highscores(view_type="total")
+    total_embed._timestamp = current_time
+    bot.cached_embeds["total"] = total_embed
+    
+    # List of important categories to preload
+    categories = [
+        "defence", "hitpoints", "prayer", "slayer",
+        "chambers_of_xeric", "theatre_of_blood", "vorkath"
+    ]
+    
+    # Load them in the background
+    for category in categories:
+        try:
+            embed = await bot.create_single_category_embed(category)
+            embed._timestamp = current_time
+            bot.cached_embeds[category] = embed
+            print(f"Preloaded {category} highscores")
+            await asyncio.sleep(1)  # Small delay to prevent rate limiting
+        except Exception as e:
+            print(f"Error preloading {category}: {str(e)}")
+    
+    print("Finished preloading highscore categories")
 
 # Run the bot
 client.run(TOKEN)
