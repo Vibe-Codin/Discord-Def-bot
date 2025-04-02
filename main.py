@@ -569,26 +569,53 @@ class HighscoresBot(discord.Client):
                             if len(valid_entries) >= 10:
                                 break
 
-            # Now process the valid entries to build the text - limit to exactly 10 players
-            for i, entry in enumerate(valid_entries[:10], 1):
-                player_name = entry['player']['displayName']
-
-                # For individual skills, get level and experience directly from the data object
-                skill_level = 0
-                exp = 0
-
-                # The API returns this in a more straightforward way for individual skills
-                if 'data' in entry:
-                    data = entry['data']
-                    if 'level' in data:
-                        skill_level = data.get('level', 0)
-                    if 'experience' in data:
-                        exp = data.get('experience', 0)
-
-                # Only include players who actually have levels in this skill
-                if exp > 0:
-                    skill_data['text'] += f"{i}. {player_name} | Lvl: {skill_level} | XP: {exp:,}\n"
-                    skill_data['has_data'] = True
+            # If we don't have 10 valid entries yet, process more players
+            processed_count = 0
+            valid_count = 0
+            
+            # Process players in batches until we have 10 or have processed all available
+            batch_start = 0
+            while valid_count < 10 and batch_start < len(skill_hiscores):
+                batch_end = min(batch_start + 10, len(skill_hiscores))
+                current_batch = skill_hiscores[batch_start:batch_end]
+                
+                # Validate this batch of players
+                validation_tasks = []
+                for entry in current_batch:
+                    player_name = entry['player']['displayName']
+                    validation_tasks.append((entry, self.is_valid_player(player_name)))
+                
+                for entry, validation_task in validation_tasks:
+                    is_valid = await validation_task
+                    if is_valid:
+                        # Extract player info
+                        player_name = entry['player']['displayName']
+                        skill_level = 0
+                        exp = 0
+                        
+                        # Get data from the entry
+                        if 'data' in entry:
+                            data = entry['data']
+                            if 'level' in data:
+                                skill_level = data.get('level', 0)
+                            if 'experience' in data:
+                                exp = data.get('experience', 0)
+                        
+                        # Only include players who have levels in this skill
+                        if exp > 0:
+                            valid_count += 1
+                            skill_data['text'] += f"{valid_count}. {player_name} | Lvl: {skill_level} | XP: {exp:,}\n"
+                            skill_data['has_data'] = True
+                            
+                            # Stop once we have 10 valid entries
+                            if valid_count >= 10:
+                                break
+                
+                # Move to the next batch of players
+                batch_start = batch_end
+                
+                # Small delay between batches to avoid rate limiting
+                await asyncio.sleep(0.1)
 
             return skill_data
 
@@ -602,6 +629,13 @@ class HighscoresBot(discord.Client):
                 embed.add_field(
                     name=skill_data['name'], 
                     value=skill_data['text'], 
+                    inline=skill_data['inline']
+                )
+            else:
+                # Add a placeholder message if no results
+                embed.add_field(
+                    name=skill_data['name'],
+                    value="No players found with levels in this skill",
                     inline=skill_data['inline']
                 )
 
