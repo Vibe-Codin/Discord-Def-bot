@@ -205,8 +205,9 @@ class HighscoresBot(discord.Client):
             # Get individual player details for combat skill levels
             player_details = await self.wom_client.get_player_details(player_name)
             if not player_details or 'data' not in player_details or 'skills' not in player_details['data']:
-                print(f"Warning: Couldn't fetch details for player {player_name}, skipping validation")
-                return False  # If we can't check, assume they're invalid to be safe
+                print(f"Warning: Couldn't fetch details for player {player_name}")
+                # Instead of skipping, let's include players we can't validate to ensure we have results
+                return True
             
             skills = player_details['data']['skills']
             
@@ -214,28 +215,28 @@ class HighscoresBot(discord.Client):
             if 'attack' in skills and 'strength' in skills and 'magic' in skills and 'ranged' in skills:
                 print(f"Player {player_name} combat levels - Attack: {skills['attack'].get('level', 0)}, Strength: {skills['strength'].get('level', 0)}, Magic: {skills['magic'].get('level', 0)}, Ranged: {skills['ranged'].get('level', 0)}")
             
-            # Check attack level
-            if 'attack' in skills and skills['attack'].get('level', 0) > 2:
-                #print(f"Player {player_name} excluded: Attack level {skills['attack'].get('level', 0)} > 2")
+            # Check attack level (increased threshold to 5)
+            if 'attack' in skills and skills['attack'].get('level', 0) > 5:
+                print(f"Player {player_name} excluded: Attack level {skills['attack'].get('level', 0)} > 5")
                 return False
                 
-            # Check strength level
-            if 'strength' in skills and skills['strength'].get('level', 0) > 2:
-                #print(f"Player {player_name} excluded: Strength level {skills['strength'].get('level', 0)} > 2")
+            # Check strength level (increased threshold to 5)
+            if 'strength' in skills and skills['strength'].get('level', 0) > 5:
+                print(f"Player {player_name} excluded: Strength level {skills['strength'].get('level', 0)} > 5")
                 return False
                 
-            # Check magic level
-            if 'magic' in skills and skills['magic'].get('level', 0) > 2:
-                #print(f"Player {player_name} excluded: Magic level {skills['magic'].get('level', 0)} > 2")
+            # Check magic level (increased threshold to 5)
+            if 'magic' in skills and skills['magic'].get('level', 0) > 5:
+                print(f"Player {player_name} excluded: Magic level {skills['magic'].get('level', 0)} > 5")
                 return False
                 
-            # Check ranged level
-            if 'ranged' in skills and skills['ranged'].get('level', 0) > 2:
-                #print(f"Player {player_name} excluded: Ranged level {skills['ranged'].get('level', 0)} > 2")
+            # Check ranged level (increased threshold to 5)
+            if 'ranged' in skills and skills['ranged'].get('level', 0) > 5:
+                print(f"Player {player_name} excluded: Ranged level {skills['ranged'].get('level', 0)} > 5")
                 return False
                 
-            print(f"Player {player_name} validated - meets requirements (≤ 2 in combat skills)")
-            return True  # If all combat skills are 2 or less
+            print(f"Player {player_name} validated - meets requirements (≤ 5 in combat skills)")
+            return True  # If all combat skills are 5 or less
         except Exception as e:
             print(f"Error validating player {player_name}: {str(e)}")
             return False  # If there's an error, assume they're invalid to be safe
@@ -249,7 +250,7 @@ class HighscoresBot(discord.Client):
         # Prepare highscores embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Total Level",
-            description=f"Top players in {group_name} by total level (≤ 2 in Attack/Strength/Magic/Ranged)",
+            description=f"Top players in {group_name} by total level (≤ 5 in Attack/Strength/Magic/Ranged)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -319,7 +320,7 @@ class HighscoresBot(discord.Client):
         # Prepare skills embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Skills {part_range}",
-            description=f"Top 5 players in each skill for {group_name} (≤ 2 in Attack/Strength/Magic/Ranged)",
+            description=f"Top 5 players in each skill for {group_name} (≤ 5 in Attack/Strength/Magic/Ranged)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -406,7 +407,7 @@ class HighscoresBot(discord.Client):
         # Prepare bosses embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Bosses {part_range}",
-            description=f"Top 5 players for each boss in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged)",
+            description=f"Top 5 players for each boss in {group_name} (≤ 5 in Attack/Strength/Magic/Ranged)",
             color=0x3498db,
             timestamp=datetime.now()
         )
