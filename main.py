@@ -1403,7 +1403,8 @@ async def on_ready():
                     # Set proper timestamp for the embed
                     if isinstance(embed_or_error, discord.Embed):
                         embed_or_error.timestamp = datetime.now()
-                        # Store cache time in dictionary                        if not hasattr(client, 'cache_times'):
+                        # Store cache time in dictionary
+                        if not hasattr(client, 'cache_times'):
                             client.cache_times = {}
                         client.cache_times["total"] = time.time()
 
@@ -1451,6 +1452,238 @@ async def preload_categories(bot):
             print(f"Error preloading {category}: {str(e)}")
 
     print("Finished preloading highscore categories")
+
+# Function to push a fresh embed to a specific channel
+async def push_fresh_embed():
+    try:
+        # Get all guilds the bot is in
+        for guild in client.guilds:
+            # Find the first text channel we can send messages to
+            for channel in guild.text_channels:
+                if channel.permissions_for(guild.me).send_messages:
+                    # Create a fresh embed
+                    embed_or_error = await client.update_highscores(force_refresh=True)
+                    
+                    if isinstance(embed_or_error, str):
+                        await channel.send(f"⚠️ {embed_or_error}")
+                    else:
+                        # Set proper timestamp for the embed
+                        if isinstance(embed_or_error, discord.Embed):
+                            embed_or_error.timestamp = datetime.now()
+                            
+                            # Create view with buttons
+                            view = HighscoresView(client, client.cached_embeds)
+                            message = await channel.send("🔄 **Fresh Highscores**", embed=embed_or_error, view=view)
+                            client.last_message = message
+                            print(f"Successfully pushed fresh embed to channel {channel.name}")
+                    return
+        print("No suitable channel found to send embed")
+    except Exception as e:
+        print(f"Error pushing fresh embed: {str(e)}")
+
+# Create a custom command to manually trigger the fresh embed
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+        
+    if message.content.lower() == '!freshembed':
+        await push_fresh_embed()
+        try:
+            await message.add_reaction("✅")
+        except:
+            pass
+    # Handle other commands
+    elif message.content.lower() == '/clanhighscores':
+        # Existing code for /clanhighscores command
+        processing_msg = await message.channel.send("Fetching highscores... Please wait a moment.")
+        print(f"DEBUG: Received command: {message.content}")
+
+        embed_or_error = await client.update_highscores(message)
+
+        if isinstance(embed_or_error, str):
+            print(f"DEBUG: Error returned: {embed_or_error}")
+            await message.channel.send(f"⚠️ {embed_or_error}")
+        else:
+            print("DEBUG: Successfully created embed, sending to channel")
+            # Create view with buttons and pass cached embeds - default to skills view
+            view = HighscoresView(client, client.cached_embeds, active_category="skills")
+
+            # Send a new message with the highscores and buttons
+            new_message = await message.channel.send(embed=embed_or_error, view=view)
+            client.last_message = new_message
+
+            # Delete the processing message after sending the embed
+            try:
+                await processing_msg.delete()
+            except:
+                pass
+
+            print("DEBUG: Message sent successfully")
+
+    elif message.content.lower() == '!refresh':
+        # Existing code for !refresh command
+        if client.last_message is None:
+            await message.channel.send("No highscores message to refresh. Please use `/clanhighscores` first.")
+            return
+
+        processing_msg = await message.channel.send("Refreshing highscores... Please wait a moment.")
+        print(f"DEBUG: Received refresh command")
+
+        # Force refresh the cache
+        embed_or_error = await client.update_highscores(message, force_refresh=True)
+
+        if isinstance(embed_or_error, str):
+            print(f"DEBUG: Error returned: {embed_or_error}")
+            await message.channel.send(f"⚠️ {embed_or_error}")
+        else:
+            print("DEBUG: Successfully created embed, updating last message")
+            try:
+                # Create view with buttons - preserve the active category if we can detect it from current view
+                active_category = "skills"  # Default
+
+                # Try to determine the current active category from the message
+                if hasattr(client.last_message, "components") and client.last_message.components:
+                    for row in client.last_message.components:
+                        for component in row.children:
+                            if isinstance(component, discord.ui.Button):
+                                if component.custom_id == "skills_button" and component.style == discord.ButtonStyle.primary:
+                                    active_category = "skills"
+                                    break
+                                elif component.custom_id == "bosses_button" and component.style == discord.ButtonStyle.primary:
+                                    active_category = "bosses"
+                                    break
+
+                view = HighscoresView(client, client.cached_embeds, active_category=active_category)
+
+                # Edit the last message instead of sending a new one
+                await client.last_message.edit(embed=embed_or_error, view=view)
+                await message.add_reaction("✅")  # Add a checkmark reaction to indicate success
+            except Exception as e:
+                print(f"DEBUG: Error updating message: {str(e)}")
+                await message.channel.send("Error updating the message. Sending a new one instead.")
+
+                # Create view with buttons
+                view = HighscoresView(client, client.cached_embeds, active_category="skills")
+                new_message = await message.channel.send(embed=embed_or_error, view=view)
+                client.last_message = new_message
+
+            # Delete the processing message after updating
+            try:
+                await processing_msg.delete()
+            except:
+                pass
+
+            print("DEBUG: Message refreshed successfully")
+
+# Modify on_ready to push a fresh embed when the bot starts up
+@client.event
+async def on_ready():
+    print(f'{client.user} has connected to Discord!')
+
+    # Set up slash commands
+    setup_commands()
+
+    # Preload categories in the background
+    asyncio.create_task(preload_categories(client))
+    
+    # Push a fresh embed to the channel
+    await push_fresh_embed()
+
+def setup_commands():
+    @client.tree.command(name="clanhighscores", description="Display the clan highscores")
+    async def clanhighscores(interaction):
+        # Defer with ephemeral=False to show loading to everyone
+        await interaction.response.defer(thinking=True, ephemeral=False)
+
+        try:
+            # Check if we have cached data first
+            if "total" in client.cached_embeds:
+                # Use cached data to respond quickly, then update in background
+                embed = client.cached_embeds["total"]
+                embed.timestamp = datetime.now()
+
+                # Create view with buttons
+                view = HighscoresView(client, client.cached_embeds)
+                message = await interaction.followup.send(embed=embed, view=view)
+                client.last_message = message
+
+                # Store the current time in the cache_times dictionary
+                if not hasattr(client, 'cache_times'):
+                    client.cache_times = {}
+                client.cache_times["total"] = time.time()
+
+                # Update cache in background
+                asyncio.create_task(client.update_highscores(force_refresh=True))
+            else:
+                # No cache, must fetch data (slower)
+                embed_or_error = await client.update_highscores()
+
+                if isinstance(embed_or_error, str):
+                    await interaction.followup.send(f"⚠️ {embed_or_error}")
+                else:
+                    # Set proper timestamp for the embed
+                    if isinstance(embed_or_error, discord.Embed):
+                        embed_or_error.timestamp = datetime.now()
+                        # Store cache time in dictionary
+                        if not hasattr(client, 'cache_times'):
+                            client.cache_times = {}
+                        client.cache_times["total"] = time.time()
+
+                    # Create view with buttons
+                    view = HighscoresView(client, client.cached_embeds)
+                    message = await interaction.followup.send(embed=embed_or_error, view=view)
+                    client.last_message = message
+        except Exception as e:
+            await interaction.followup.send(f"Error displaying highscores: {str(e)}")
+            print(f"Error in clanhighscores command: {str(e)}")
+
+    @client.tree.command(name="refresh", description="Refresh the clan highscores")
+    async def refresh(interaction):
+        # Defer with ephemeral=True to only show loading to the user who triggered it
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        try:
+            # Send a quick response to avoid timeout
+            await interaction.followup.send("Refreshing highscores...", ephemeral=True)
+
+            # Force refresh the cache in background
+            embed_or_error = await client.update_highscores(force_refresh=True)
+
+            if isinstance(embed_or_error, str):
+                await interaction.followup.send(f"⚠️ {embed_or_error}", ephemeral=True)
+            else:
+                # Set proper timestamp for the embed
+                if isinstance(embed_or_error, discord.Embed):
+                    embed_or_error.timestamp = datetime.now()
+                    # Store in cache without custom attribute
+                    client.cached_embeds["total"] = embed_or_error
+
+                # Create a new message with refreshed highscores
+                view = HighscoresView(client, client.cached_embeds, active_category="skills")
+
+                # Send a new message to the channel
+                channel = interaction.channel
+                if channel:
+                    new_message = await channel.send(embed=embed_or_error, view=view)
+                    client.last_message = new_message
+                    await interaction.followup.send("Highscores refreshed successfully!", ephemeral=True)
+                else:
+                    await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error refreshing highscores: {str(e)}", ephemeral=True)
+            print(f"Error in refresh command: {str(e)}")
+
+    # Sync the commands with Discord
+    print("Syncing commands with Discord...")
+    try:
+        # Clear any existing commands first
+        client.tree.clear_commands(guild=None)
+        # Sync the commands globally (may take up to an hour to propagate)
+        asyncio.create_task(client.tree.sync())
+        print("Commands synced successfully!")
+    except Exception as e:
+        print(f"Error syncing commands: {str(e)}")
 
 # Run the bot
 client.run(TOKEN)
