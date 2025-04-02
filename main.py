@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands, tasks
 import aiohttp
 import os
+import json
 
 # Set your Wise Old Man clan ID, channel ID, and base URL
 CLAN_ID = "2763"  # OSRS Defence clan ID
@@ -54,7 +55,14 @@ async def fetch_clan_data():
                     print(f"Error response: {error_text}")
                     return None
                 
-                members_data = await resp.json()
+                try:
+                    text_data = await resp.text()
+                    members_data = json.loads(text_data)
+                    print(f"Received data: {text_data[:200]}...")
+                except json.JSONDecodeError as e:
+                    print(f"JSON decode error: {e}")
+                    print(f"Raw response: {text_data[:200]}...")
+                    return None
                 if not members_data:
                     print("Empty members data received from API")
                     return None
