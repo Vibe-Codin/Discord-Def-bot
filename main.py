@@ -1635,5 +1635,50 @@ print("All commands registered to the tree")
 
 
 
-# Run the bot
-client.run(TOKEN)
+# Run the bot with better error handling and retry logic
+async def start_bot():
+    try:
+        # Set up better logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        print("Starting Discord bot...")
+        print(f"Using token: {'*' * (len(TOKEN) - 4) + TOKEN[-4:] if TOKEN else 'No token found!'}")
+        
+        # Check if token is empty
+        if not TOKEN:
+            print("ERROR: Discord bot token is empty! Make sure you've set the DISCORD_BOT_TOKEN environment variable.")
+            return
+            
+        # Try to connect with retry logic
+        retry_count = 0
+        max_retries = 3
+        while retry_count < max_retries:
+            try:
+                print(f"Attempting to connect to Discord (attempt {retry_count + 1}/{max_retries})...")
+                await client.start(TOKEN)
+                break
+            except discord.errors.LoginFailure as e:
+                print(f"Authentication failed: {e}")
+                print("Please check if your Discord bot token is valid")
+                break
+            except (discord.errors.ConnectionClosed, ConnectionError, TimeoutError) as e:
+                retry_count += 1
+                wait_time = 5 * retry_count
+                print(f"Connection error: {e}. Retrying in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+                break
+    except Exception as e:
+        print(f"Failed to start bot: {e}")
+
+# Use asyncio to run the bot
+try:
+    asyncio.run(start_bot())
+except KeyboardInterrupt:
+    print("Bot was stopped manually by keyboard interrupt")
+except Exception as e:
+    print(f"Critical error starting bot: {e}")
