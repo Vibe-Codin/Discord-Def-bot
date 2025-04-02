@@ -1315,9 +1315,20 @@ client = HighscoresBot(intents=intents)
 @client.event
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
+    
+    # Sync commands with Discord
+    print("Syncing commands with Discord...")
+    try:
+        # Clear any existing commands first
+        client.tree.clear_commands(guild=None)
+        # Sync the commands globally (may take up to an hour to propagate)
+        await client.tree.sync()
+        print("Commands synced successfully!")
+    except Exception as e:
+        print(f"Error syncing commands: {str(e)}")
 
-    # Set up slash commands
-    @client.tree.command(name="clanhighscores", description="Display the clan highscores")
+# Set up slash commands
+@client.tree.command(name="clanhighscores", description="Display the clan highscores")
     async def clanhighscores(interaction):
         # Defer with ephemeral=False to show loading to everyone
         await interaction.response.defer(thinking=True, ephemeral=False)
@@ -1445,7 +1456,19 @@ async def on_ready():
             # Don't refresh cache, use existing data
             channel = interaction.channel
             if channel:
-                await push_fresh_embed(refresh_cache=False)
+                # Create a new view with cached embeds
+                view = HighscoresView(client, client.cached_embeds)
+                
+                # Get embed from cache or create a new one
+                if "total" in client.cached_embeds:
+                    embed = client.cached_embeds["total"]
+                    embed.timestamp = datetime.now()
+                else:
+                    embed = await client.update_highscores(force_refresh=False)
+                
+                # Send to channel
+                message = await channel.send(embed=embed, view=view)
+                client.last_message = message
                 await interaction.followup.send("New highscores embed created successfully!", ephemeral=True)
             else:
                 await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
@@ -1463,7 +1486,19 @@ async def on_ready():
             # Refresh cache and create new embed
             channel = interaction.channel
             if channel:
-                await push_fresh_embed(refresh_cache=True)
+                # Force refresh the cache
+                embed = await client.update_highscores(force_refresh=True)
+                
+                # Set timestamp
+                if isinstance(embed, discord.Embed):
+                    embed.timestamp = datetime.now()
+                
+                # Create view
+                view = HighscoresView(client, client.cached_embeds)
+                
+                # Send to channel
+                message = await channel.send(embed=embed, view=view)
+                client.last_message = message
                 await interaction.followup.send("Highscores cache refreshed and new embed created successfully!", ephemeral=True)
             else:
                 await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
