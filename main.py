@@ -3,6 +3,12 @@ import discord
 from discord.ext import commands, tasks
 import aiohttp
 import os
+import time
+from datetime import datetime, timedelta
+
+# Rate limiting
+RATE_LIMIT = 60  # seconds between API calls
+last_api_call = 0
 
 # Set your Wise Old Man clan ID, channel ID, and base URL
 CLAN_ID = "2763"  # OSRS Defence clan ID
@@ -35,6 +41,16 @@ highscore_messages = {
 }
 
 async def fetch_clan_data():
+    global last_api_call
+    
+    # Check rate limit
+    current_time = time.time()
+    if current_time - last_api_call < RATE_LIMIT:
+        print("Rate limit reached, waiting...")
+        return None
+        
+    last_api_call = current_time
+    
     try:
         headers = {
             'Accept': 'application/json',
@@ -154,7 +170,10 @@ async def clanhighscores(interaction: discord.Interaction):
     try:
         clan_data = await fetch_clan_data()
         if clan_data is None:
-            await interaction.followup.send("Error fetching clan data. Please try again later.")
+            if time.time() - last_api_call < RATE_LIMIT:
+                await interaction.followup.send(f"Please wait {RATE_LIMIT} seconds between requests.")
+            else:
+                await interaction.followup.send("Error fetching clan data. Please try again later.")
             return
         msg1, msg2, msg3 = build_messages(clan_data)
         if msg1 is None or msg2 is None or msg3 is None:
