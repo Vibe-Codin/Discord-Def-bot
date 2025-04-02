@@ -47,18 +47,20 @@ class HighscoresView(View):
         new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
 
         # Check if we have a cached embed and if it's still valid (less than 24 hours old)
-        if "total" in self.cached_embeds and hasattr(self.cached_embeds["total"], "_timestamp") and isinstance(self.cached_embeds["total"]._timestamp, (int, float)):
+        if "total" in self.cached_embeds and hasattr(self.cached_embeds["total"], '_cache_time') and isinstance(self.cached_embeds["total"]._cache_time, (int, float)):
             embed = self.cached_embeds["total"]
             current_time = time.time()
-            cache_age = current_time - self.cached_embeds["total"]._timestamp
+            cache_age = current_time - self.cached_embeds["total"]._cache_time
 
             if cache_age > 86400:  # If cache is older than 24 hours, refresh it
                 embed = await self.bot.update_highscores(view_type="total")
-                embed._timestamp = current_time
+                embed._cache_time = current_time
+                embed.timestamp = datetime.now()
                 self.cached_embeds["total"] = embed
         else:
             embed = await self.bot.update_highscores(view_type="total")
-            embed._timestamp = time.time()
+            embed._cache_time = time.time()
+            embed.timestamp = datetime.now()
             self.cached_embeds["total"] = embed
 
         await interaction.message.edit(embed=embed, view=new_view)
@@ -73,18 +75,20 @@ class HighscoresView(View):
         # Get a generic bosses overview embed or create one
         bosses_overview_key = "bosses_overview"
 
-        if bosses_overview_key in self.cached_embeds and hasattr(self.cached_embeds[bosses_overview_key], "_timestamp") and isinstance(self.cached_embeds[bosses_overview_key]._timestamp, (int, float)):
+        if bosses_overview_key in self.cached_embeds and hasattr(self.cached_embeds[bosses_overview_key], '_cache_time') and isinstance(self.cached_embeds[bosses_overview_key]._cache_time, (int, float)):
             embed = self.cached_embeds[bosses_overview_key]
             current_time = time.time()
-            cache_age = current_time - self.cached_embeds[bosses_overview_key]._timestamp
+            cache_age = current_time - self.cached_embeds[bosses_overview_key]._cache_time
 
             if cache_age > 86400:  # If cache is older than 24 hours, refresh it
                 embed = await self.bot.create_bosses_overview_embed()
-                embed._timestamp = current_time
+                embed._cache_time = current_time
+                embed.timestamp = datetime.now()
                 self.cached_embeds[bosses_overview_key] = embed
         else:
             embed = await self.bot.create_bosses_overview_embed()
-            embed._timestamp = time.time()
+            embed._cache_time = time.time()
+            embed.timestamp = datetime.now()
             self.cached_embeds[bosses_overview_key] = embed
 
         await interaction.message.edit(embed=embed, view=new_view)
@@ -134,21 +138,24 @@ class SkillsDropdown(discord.ui.Select):
             cached_entry = self.cached_embeds.get(selected_value, None)
             cache_age = 0
 
-            if cached_entry and hasattr(cached_entry, '_timestamp') and isinstance(cached_entry._timestamp, (int, float)):
-                cache_age = current_time - cached_entry._timestamp
-
-            # Check if it's the overall total or a specific skill
-            if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+            if cached_entry and hasattr(cached_entry, '_cache_time') and isinstance(cached_entry._cache_time, (int, float)):
+                cache_age = current_time - cached_entry._cache_time
                 embed = cached_entry
                 print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
             elif selected_value == "total":
                 embed = await self.bot.update_highscores(view_type="total")
-                embed._timestamp = current_time  # Add timestamp to track age
+                # Add a cache time attribute (not a timestamp for the embed)
+                embed._cache_time = current_time
+                # Set a proper discord.py timestamp
+                embed.timestamp = datetime.now()
                 self.cached_embeds["total"] = embed
             else:
                 # For specific skill
                 embed = await self.bot.create_single_category_embed(selected_value)
-                embed._timestamp = current_time  # Add timestamp to track age
+                # Add a cache time attribute (not a timestamp for the embed)
+                embed._cache_time = current_time
+                # Set a proper discord.py timestamp
+                embed.timestamp = datetime.now()
                 self.cached_embeds[selected_value] = embed
 
             # Create a new HighscoresView with cached embeds to replace the existing view
@@ -223,21 +230,20 @@ class BossesDropdown(discord.ui.Select):
             cached_entry = self.cached_embeds.get(selected_value, None)
             cache_age = 0
 
-            if cached_entry and hasattr(cached_entry, '_timestamp') and isinstance(cached_entry._timestamp, (int, float)):
-                cache_age = current_time - cached_entry._timestamp
-
-            # For bosses overview or specific boss
-            if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
+            if cached_entry and hasattr(cached_entry, '_cache_time') and isinstance(cached_entry._cache_time, (int, float)):
+                cache_age = current_time - cached_entry._cache_time
                 embed = cached_entry
                 print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
             elif selected_value == "bosses_overview":
                 embed = await self.bot.create_bosses_overview_embed()
-                embed._timestamp = current_time
+                embed._cache_time = current_time
+                embed.timestamp = datetime.now()
                 self.cached_embeds["bosses_overview"] = embed
             else:
                 # For specific boss
                 embed = await self.bot.create_single_category_embed(selected_value)
-                embed._timestamp = current_time
+                embed._cache_time = current_time
+                embed.timestamp = datetime.now()
                 self.cached_embeds[selected_value] = embed
 
             # Create a new HighscoresView with cached embeds to replace the existing view
@@ -1249,7 +1255,7 @@ async def on_ready():
                     await channel.send(f"⚠️ {embed_or_error}")
                 else:
                     # Store timestamp as a float to avoid type issues
-                    embed_or_error._timestamp = time.time()
+                    embed_or_error._cache_time = time.time()
 
                     # Create view with buttons
                     view = HighscoresView(client, client.cached_embeds)
@@ -1264,13 +1270,13 @@ async def preload_categories(bot):
     current_time = time.time()
     # Preload total first
     total_embed = await bot.update_highscores(view_type="total")
-    total_embed._timestamp = current_time
+    total_embed._cache_time = current_time
     bot.cached_embeds["total"] = total_embed
 
     # Preload bosses overview
     try:
         bosses_overview_embed = await bot.create_bosses_overview_embed()
-        bosses_overview_embed._timestamp = current_time
+        bosses_overview_embed._cache_time = current_time
         bot.cached_embeds["bosses_overview"] = bosses_overview_embed
         print("Preloaded bosses overview")
     except Exception as e:
@@ -1286,7 +1292,7 @@ async def preload_categories(bot):
     for category in categories:
         try:
             embed = await bot.create_single_category_embed(category)
-            embed._timestamp = current_time
+            embed._cache_time = current_time
             bot.cached_embeds[category] = embed
             print(f"Preloaded {category} highscores")
             await asyncio.sleep(1)  # Small delay to prevent rate limiting
