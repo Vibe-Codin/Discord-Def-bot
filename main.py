@@ -30,42 +30,51 @@ class HighscoresView(View):
 
     async def total_callback(self, interaction):
         try:
-            await interaction.response.defer()
+            # Use defer with ephemeral=False to acknowledge the interaction faster
+            await interaction.response.defer(ephemeral=False, thinking=True)
+            
             if "total" in self.cached_embeds:
                 embed = self.cached_embeds["total"]
             else:
                 embed = await self.bot.update_highscores(view_type="total")
                 self.cached_embeds["total"] = embed
+                
             await interaction.message.edit(embed=embed, view=self)
-        except discord.errors.NotFound:
+        except discord_errors.NotFound:
             print("Interaction expired for total button")
         except Exception as e:
             print(f"Error in total callback: {str(e)}")
 
     async def skills_callback(self, interaction):
         try:
-            await interaction.response.defer()
+            # Use defer with ephemeral=False to acknowledge the interaction faster
+            await interaction.response.defer(ephemeral=False, thinking=True)
+            
             if "skills" in self.cached_embeds:
                 embed = self.cached_embeds["skills"]
             else:
                 embed = await self.bot.update_highscores(view_type="skills")
                 self.cached_embeds["skills"] = embed
+                
             await interaction.message.edit(embed=embed, view=self)
-        except discord.errors.NotFound:
+        except discord_errors.NotFound:
             print("Interaction expired for skills button")
         except Exception as e:
             print(f"Error in skills callback: {str(e)}")
 
     async def bosses_callback(self, interaction):
         try:
-            await interaction.response.defer()
+            # Use defer with ephemeral=False to acknowledge the interaction faster
+            await interaction.response.defer(ephemeral=False, thinking=True)
+            
             if "bosses" in self.cached_embeds:
                 embed = self.cached_embeds["bosses"]
             else:
                 embed = await self.bot.update_highscores(view_type="bosses")
                 self.cached_embeds["bosses"] = embed
+                
             await interaction.message.edit(embed=embed, view=self)
-        except discord.errors.NotFound:
+        except discord_errors.NotFound:
             print("Interaction expired for bosses button")
         except Exception as e:
             print(f"Error in bosses callback: {str(e)}")
