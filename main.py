@@ -1,5 +1,6 @@
 import discord
 from discord.ui import View, Button
+from discord import app_commands
 import asyncio
 import json
 import requests
@@ -334,7 +335,14 @@ class WOMClient:
 # Discord bot
 class HighscoresBot(discord.Client):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        # Make sure intents are set properly
+        intents = discord.Intents.default()
+        intents.message_content = True
+        super().__init__(intents=intents, *args, **kwargs)
+        
+        # Create command tree for slash commands
+        self.tree = discord.app_commands.CommandTree(self)
+        
         self.wom_client = WOMClient()
         self.GROUP_ID = 2763  # Group ID for OSRS Defence clan
         self.last_message = None
@@ -637,7 +645,7 @@ class HighscoresBot(discord.Client):
                     player_name = entry['player']['displayName']
                     validation_tasks.append((entry, self.is_valid_player(player_name)))
 
-                for entry, validation_task in validationtasks:
+                for entry, validation_task in validation_tasks:
                     is_valid = await validation_task
                     if is_valid:
                         # Extract player info
@@ -1358,7 +1366,7 @@ async def preload_categories(bot):
     current_time = time.time()
     # Preload total first
     total_embed = await bot.update_highscores(view_type="total")
-    total_embed._cache_time = currenttime
+    total_embed._cache_time = current_time
     bot.cached_embeds["total"] = total_embed
 
     # Preload bosses overview
