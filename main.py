@@ -96,7 +96,12 @@ class HighscoresView(View):
                 await interaction.response.send_message("Switching to Bosses category... Please wait while loading data.", ephemeral=True)
 
             # Create a new view with bosses as active category immediately
-            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
+            try:
+                new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
+            except Exception as view_error:
+                print(f"Error creating bosses view: {str(view_error)}")
+                await interaction.edit_original_response(content=f"❌ Error creating bosses view: {str(view_error)}")
+                return
 
             # Get a generic bosses overview embed or create one
             if using_cached:
@@ -113,9 +118,25 @@ class HighscoresView(View):
                     # Store cache time for this embed
                     self.bot.cache_times[bosses_overview_key] = time.time()
 
+            success = False
+            error_message = None
+            
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
-
+                success = True
+            except discord.errors.HTTPException as e:
+                error_message = str(e)
+                print(f"Error editing message in bosses button: {error_message}")
+                # Try to send a new message instead
+                try:
+                    await interaction.message.channel.send(embed=embed, view=new_view)
+                    success = True
+                    await interaction.edit_original_response(content="✅ Created new Bosses embed (couldn't update existing message)")
+                except Exception as e2:
+                    error_message = str(e2)
+                    print(f"Error sending new message: {error_message}")
+            
+            if success:
                 if using_cached:
                     # Get cache age
                     cache_age = 0
@@ -127,18 +148,13 @@ class HighscoresView(View):
                         await interaction.edit_original_response(content=f"✅ Switched to Bosses category")
                 else:
                     await interaction.edit_original_response(content="✅ Switched to Bosses category (freshly loaded)")
-            except discord.errors.HTTPException as e:
-                print(f"Error editing message in bosses button: {str(e)}")
-                try:
-                    await interaction.message.channel.send(embed=embed, view=new_view)
-                    await interaction.edit_original_response(content="✅ Created new Bosses embed (couldn't update existing message)")
-                except Exception as e2:
-                    print(f"Error sending new message: {str(e2)}")
-                    await interaction.edit_original_response(content="❌ Failed to update or create Bosses embed")
+            else:
+                await interaction.edit_original_response(content=f"❌ Failed to update or create Bosses embed: {error_message}")
         except Exception as e:
-            print(f"Error in bosses_button_callback: {str(e)}")
+            error_msg = str(e)
+            print(f"Error in bosses_button_callback: {error_msg}")
             try:
-                await interaction.edit_original_response(content=f"❌ An error occurred: {str(e)}")
+                await interaction.edit_original_response(content=f"❌ An error occurred: {error_msg}")
             except:
                 print("Could not update error message")
 
@@ -253,11 +269,11 @@ class BossesDropdown(discord.ui.Select):
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
 
-        # Define boss options - up to 25 maximum allowed by Discord
+        # Define boss options - exactly 25 maximum allowed by Discord
         options = [
             # Overview option
             discord.SelectOption(label="Boss Overview", value="bosses_overview", description="Overview of top boss kills"),
-            # Core bosses from the specified list
+            # Core bosses from the specified list - limited to fit within Discord's 25 option limit
             discord.SelectOption(label="Barrows Chests", value="barrows_chests", description="Barrows Chests highscores"),
             discord.SelectOption(label="Bryophyta", value="bryophyta", description="Bryophyta boss highscores"),
             discord.SelectOption(label="Callisto", value="callisto", description="Callisto boss highscores"),
@@ -268,7 +284,6 @@ class BossesDropdown(discord.ui.Select):
             discord.SelectOption(label="Commander Zilyana", value="commander_zilyana", description="Commander Zilyana boss highscores"),
             discord.SelectOption(label="Corporeal Beast", value="corporeal_beast", description="Corporeal Beast highscores"),
             discord.SelectOption(label="Crazy Archaeologist", value="crazy_archaeologist", description="Crazy Archaeologist highscores"),
-            discord.SelectOption(label="Deranged Archaeologist", value="deranged_archaeologist", description="Deranged Archaeologist highscores"),
             discord.SelectOption(label="Giant Mole", value="giant_mole", description="Giant Mole boss highscores"),
             discord.SelectOption(label="Kalphite Queen", value="kalphite_queen", description="Kalphite Queen boss highscores"),
             discord.SelectOption(label="King Black Dragon", value="king_black_dragon", description="King Black Dragon highscores"),
@@ -284,6 +299,11 @@ class BossesDropdown(discord.ui.Select):
             discord.SelectOption(label="Vetion", value="vetion", description="Vetion boss highscores"),
             discord.SelectOption(label="Wintertodt", value="wintertodt", description="Wintertodt boss highscores"),
         ]
+        
+        # Ensure we don't exceed 25 options (Discord limit)
+        if len(options) > 25:
+            print(f"Warning: Dropdown has {len(options)} options, limiting to 25")
+            options = options[:25]
 
         super().__init__(placeholder="Select a boss category...", min_values=1, max_values=1, options=options)
 
