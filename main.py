@@ -15,7 +15,7 @@ class HighscoresView(View):
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
 
-        # Create buttons - total, 3 skills buttons, and 5 boss buttons
+        # Create buttons with fixed labels - total, 3 skills buttons, and 5 boss buttons
         total_btn = Button(style=discord.ButtonStyle.primary, label="Total Level", custom_id="total")
         skills1_btn = Button(style=discord.ButtonStyle.primary, label="Skills 1", custom_id="skills1")
         skills2_btn = Button(style=discord.ButtonStyle.primary, label="Skills 2", custom_id="skills2")
@@ -519,17 +519,14 @@ class HighscoresBot(discord.Client):
         skills_per_part = len(all_skills) // 3
         if part == 1:
             skills = all_skills[:skills_per_part]  # First third of skills
-            part_range = "Combat & Core"
         elif part == 2:
             skills = all_skills[skills_per_part:skills_per_part*2]  # Middle third of skills
-            part_range = "Gathering"
         else:  # part 3
             skills = all_skills[skills_per_part*2:]  # Last third of skills
-            part_range = "Production"
 
         # Prepare skills embed
         embed = discord.Embed(
-            title=f"{group_name} Highscores - Skills {part_range}",
+            title=f"{group_name} Highscores - Skills {part}",
             description=f"Top 10 players in each skill for {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
             color=0x3498db,
             timestamp=datetime.now()
@@ -643,23 +640,18 @@ class HighscoresBot(discord.Client):
 
         if part == 1:
             bosses = all_bosses[:bosses_per_part]
-            part_range = "1-10"
         elif part == 2:
             bosses = all_bosses[bosses_per_part:2*bosses_per_part]
-            part_range = "11-20"
         elif part == 3:
             bosses = all_bosses[2*bosses_per_part:3*bosses_per_part]
-            part_range = "21-30"
         elif part == 4:
             bosses = all_bosses[3*bosses_per_part:4*bosses_per_part]
-            part_range = "31-40"
         else:  # part 5
             bosses = all_bosses[4*bosses_per_part:]
-            part_range = "41-50"
 
         # Prepare bosses embed
         embed = discord.Embed(
-            title=f"{group_name} Highscores - Bosses {part_range}",
+            title=f"{group_name} Highscores - Bosses {part}",
             description=f"Top 10 players for each boss in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
             color=0x3498db,
             timestamp=datetime.now()
