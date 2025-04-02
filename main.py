@@ -43,7 +43,7 @@ async def fetch_clan_data():
         }
         async with aiohttp.ClientSession() as session:
             # First fetch group members list
-            url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
+            url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats"
             print(f"Fetching group members from: {url}")
             async with session.get(url, headers=headers) as resp:
                 if resp.status == 404:
@@ -56,32 +56,16 @@ async def fetch_clan_data():
                     return None
                 
                 try:
+                    members_data = await resp.json()
+                    if not members_data:
+                        print("Empty members data received from API")
+                        return None
+                    return members_data
+                except Exception as e:
+                    print(f"Error parsing response: {e}")
                     text_data = await resp.text()
-                    members_data = json.loads(text_data)
-                    print(f"Received data: {text_data[:200]}...")
-                except json.JSONDecodeError as e:
-                    print(f"JSON decode error: {e}")
                     print(f"Raw response: {text_data[:200]}...")
                     return None
-                if not members_data:
-                    print("Empty members data received from API")
-                    return None
-                
-                # Get detailed stats for each member
-                players = []
-                for member in members_data:
-                    username = member.get('username')
-                    if not username:
-                        continue
-                        
-                    stats_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
-                    print(f"Fetching stats for {username}")
-                    async with session.get(stats_url, headers=headers) as stats_resp:
-                        if stats_resp.status == 200:
-                            player_data = await stats_resp.json()
-                            players.append(player_data)
-                        else:
-                            print(f"Failed to fetch stats for {username}")
                 
                 print(f"Successfully fetched data for {len(players)} members")
                 return players
