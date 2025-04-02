@@ -25,3 +25,5 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python main.py"
+# Added automatic restart capability in case of crashes
+restart = "always"

@@ -1,6 +1,7 @@
 import discord
 from discord.ui import View, Button
 from discord import app_commands
+from discord import errors as discord_errors
 import asyncio
 import json
 import requests
@@ -1397,20 +1398,47 @@ client = HighscoresBot(intents=intents)
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
 
-    # Sync commands with Discord - Re-enabled to fix missing slash commands
+    # Sync commands with Discord - Enhanced with better error handling and retry
     print("Syncing commands with Discord...")
-    try:
-        # Clear any existing commands first
-        client.tree.clear_commands(guild=None)
-        # Sync the commands globally (may take up to an hour to propagate)
-        await client.tree.sync()
-        print("Commands synced successfully!")
-    except Exception as e:
-        print(f"Error syncing commands: {str(e)}")
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            # Clear any existing commands first
+            client.tree.clear_commands(guild=None)
+            
+            # Explicitly ensure all commands are properly registered
+            print("Registering commands...")
+            client.tree.get_command("clanhighscores")
+            client.tree.get_command("refresh")
+            client.tree.get_command("freshembed")
+            client.tree.get_command("new")
+            client.tree.get_command("refreshcache")
+            
+            # Sync the commands globally (may take up to an hour to propagate)
+            print("Syncing command tree...")
+            await client.tree.sync()
+            
+            print(f"Commands synced successfully! Commands in tree: {len(client.tree.get_commands())}")
+            print(f"Available commands: {[cmd.name for cmd in client.tree.get_commands()]}")
+            break
+        except Exception as e:
+            retry_count += 1
+            print(f"Error syncing commands (attempt {retry_count}/{max_retries}): {str(e)}")
+            if retry_count < max_retries:
+                print(f"Waiting 5 seconds before retry...")
+                await asyncio.sleep(5)
+            else:
+                print("Failed to sync commands after multiple attempts.")
 
-# Set up slash commands
-@client.tree.command(name="clanhighscores", description="Display the clan highscores")
-async def clanhighscores(interaction):
+# Set up slash commands with explicit decorators for better registration
+@client.tree.command(
+    name="clanhighscores", 
+    description="Display the clan highscores"
+)
+@app_commands.checks.cooldown(1, 30.0, key=lambda i: i.guild_id)
+async def clanhighscores(interaction: discord.Interaction):
     # Defer with ephemeral=False to show loading to everyone
     await interaction.response.defer(thinking=True, ephemeral=False)
 
@@ -1457,7 +1485,8 @@ async def clanhighscores(interaction):
         print(f"Error in clanhighscores command: {str(e)}")
 
 @client.tree.command(name="refresh", description="Refresh the clan highscores")
-async def refresh(interaction):
+@app_commands.checks.cooldown(1, 60.0, key=lambda i: i.guild_id)
+async def refresh(interaction: discord.Interaction):
     # Defer with ephemeral=True to only show loading to the user who triggered it
     await interaction.response.defer(thinking=True, ephemeral=True)
 
@@ -1493,7 +1522,8 @@ async def refresh(interaction):
         print(f"Error in refresh command: {str(e)}")
 
 @client.tree.command(name="freshembed", description="Create a fresh highscores embed")
-async def freshembed(interaction):
+@app_commands.checks.cooldown(1, 60.0, key=lambda i: i.guild_id)
+async def freshembed(interaction: discord.Interaction):
     # Defer with ephemeral=True to only show loading to the user who triggered it
     await interaction.response.defer(thinking=True, ephemeral=True)
 
@@ -1528,7 +1558,8 @@ async def freshembed(interaction):
         print(f"Error in freshembed command: {str(e)}")
 
 @client.tree.command(name="new", description="Push a new highscores embed without refreshing cache")
-async def new_embed(interaction):
+@app_commands.checks.cooldown(1, 30.0, key=lambda i: i.guild_id)
+async def new_embed(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     try:
@@ -1558,7 +1589,8 @@ async def new_embed(interaction):
         print(f"Error in new_embed command: {str(e)}")
 
 @client.tree.command(name="refreshcache", description="Refresh highscores cache and push a new embed")
-async def refresh_cache(interaction):
+@app_commands.checks.cooldown(1, 60.0, key=lambda i: i.guild_id)
+async def refresh_cache(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     try:
@@ -1586,6 +1618,34 @@ async def refresh_cache(interaction):
     except Exception as e:
         await interaction.followup.send(f"Error refreshing cache: {str(e)}", ephemeral=True)
         print(f"Error in refresh_cache command: {str(e)}")
+
+# Add error handler for slash command errors
+@client.event
+async def on_command_error(ctx, error):
+    if isinstance(error, discord.app_commands.CommandOnCooldown):
+        await ctx.send(f"This command is on cooldown. Try again in {error.retry_after:.1f} seconds.", ephemeral=True)
+    else:
+        print(f"Command error: {error}")
+        await ctx.send(f"An error occurred: {error}", ephemeral=True)
+
+# Add error handler for app command errors
+@client.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CommandOnCooldown):
+        await interaction.response.send_message(
+            f"This command is on cooldown. Try again in {error.retry_after:.1f} seconds.",
+            ephemeral=True
+        )
+    else:
+        error_message = f"Command error: {str(error)}"
+        print(error_message)
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(f"An error occurred: {error}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"An error occurred: {error}", ephemeral=True)
+        except Exception as e:
+            print(f"Error sending error message: {e}")
 
 # Command registration is complete
 print("All commands registered to the tree")
