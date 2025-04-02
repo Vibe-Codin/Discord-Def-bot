@@ -271,6 +271,18 @@ def build_messages(clan_data):
         print(f"Sample player data structure: {json.dumps(sample_player, indent=2)[:500]}")
         if 'latestSnapshot' in sample_player:
             print(f"Snapshot data sample: {json.dumps(sample_player['latestSnapshot'], indent=2)[:500]}")
+            
+            # Get detailed skill data structure for debugging
+            if ('latestSnapshot' in sample_player and 
+                'data' in sample_player['latestSnapshot'] and 
+                'skills' in sample_player['latestSnapshot']['data']):
+                skills_data = sample_player['latestSnapshot']['data']['skills']
+                print(f"Skills data structure: {json.dumps(list(skills_data.keys())[:5], indent=2)}")
+                
+                # Print a sample skill's detailed structure
+                if skills_data and len(skills_data) > 0:
+                    first_skill = next(iter(skills_data))
+                    print(f"Sample skill '{first_skill}' structure: {json.dumps(skills_data[first_skill], indent=2)}")
     
     for player in clan_data:
         if not isinstance(player, dict):
@@ -324,27 +336,56 @@ def build_messages(clan_data):
         total_level = player.get('level', 0)
         total_exp = player.get('exp', 0)
         
-        # If those aren't available, try to get from snapshot
-        if (total_level == 0 or total_exp == 0) and 'latestSnapshot' in player and player['latestSnapshot']:
+        # Try to extract from different data structures
+        if 'latestSnapshot' in player and player['latestSnapshot']:
             snapshot = player['latestSnapshot']
+            
+            # Check if this is a direct WOM API response format
             if isinstance(snapshot, dict):
-                # Try path: latestSnapshot.data.overall
-                if 'data' in snapshot and isinstance(snapshot['data'], dict):
-                    if 'overall' in snapshot['data']:
-                        total_level = snapshot['data']['overall'].get('level', total_level)
-                        total_exp = snapshot['data']['overall'].get('experience', total_exp)
-                    # Try summing up individual skills if overall not present
-                    elif 'skills' in snapshot['data'] and isinstance(snapshot['data']['skills'], dict):
-                        skills = snapshot['data']['skills']
-                        total_level = sum(skill.get('level', 0) for skill in skills.values() if isinstance(skill, dict))
-                        total_exp = sum(skill.get('experience', 0) for skill in skills.values() if isinstance(skill, dict))
-                
-                # Try direct access: latestSnapshot.level and latestSnapshot.exp
-                if total_level == 0:
-                    total_level = snapshot.get('level', total_level)
-                if total_exp == 0:
-                    total_exp = snapshot.get('exp', total_exp)
+                # Try to get from player top-level fields first (these are often more reliable)
+                if total_level == 0 and 'level' in player:
+                    total_level = player['level']
+                if total_exp == 0 and 'exp' in player:
+                    total_exp = player['exp']
                     
+                # Try path: latestSnapshot.data.skills.overall
+                if 'data' in snapshot and isinstance(snapshot['data'], dict):
+                    data = snapshot['data']
+                    if 'skills' in data and isinstance(data['skills'], dict):
+                        skills_data = data['skills']
+                        if 'overall' in skills_data and isinstance(skills_data['overall'], dict):
+                            overall = skills_data['overall']
+                            if total_level == 0 and 'level' in overall:
+                                total_level = overall['level']
+                            if total_exp == 0 and 'experience' in overall:
+                                total_exp = overall['experience']
+                    
+                    # Try direct overall in data
+                    elif 'overall' in data and isinstance(data['overall'], dict):
+                        if total_level == 0 and 'level' in data['overall']:
+                            total_level = data['overall']['level']
+                        if total_exp == 0 and 'experience' in data['overall']:
+                            total_exp = data['overall']['experience']
+                    
+                    # Try summing all skills if we still don't have a level
+                    if total_level == 0 and 'skills' in data and isinstance(data['skills'], dict):
+                        skills = data['skills']
+                        skill_levels = []
+                        for skill_name, skill_data in skills.items():
+                            if isinstance(skill_data, dict) and 'level' in skill_data:
+                                skill_levels.append(skill_data['level'])
+                        if skill_levels:
+                            total_level = sum(skill_levels)
+                
+        # If we still have level 0 but have exp, estimate level
+        if total_level == 0 and total_exp > 0:
+            # Use a simple estimation formula based on total XP
+            if total_exp > 13_034_431:  # XP for level 99 in all skills
+                total_level = 2277  # Max level
+            else:
+                # Rough estimate based on XP curve
+                total_level = int(total_exp / 7000)
+                
         return (total_level, total_exp)
     
     # First message: Top 10 players by Total Level
@@ -371,32 +412,54 @@ def build_messages(clan_data):
     for skill in skills_list:
         msg2 += f"\n**{skill.title()}:**\n"
         
-        # Define a function to safely extract skill experience for sorting
-        def get_skill_exp(player, skill_name):
+        # Define a function to safely extract skill experience and level for sorting
+        def get_skill_data(player, skill_name):
+            # Initialize with defaults
+            exp = 0
+            level = 0
+            
+            # First try top-level player fields (some API responses have this)
+            if skill_name == 'overall':
+                exp = player.get('exp', 0)
+                level = player.get('level', 0)
+                if exp > 0 or level > 0:
+                    return (exp, level)
+            
+            # Try to extract from different snapshot structures
             if 'latestSnapshot' not in player or not player['latestSnapshot']:
-                return 0
+                return (exp, level)
                 
             snapshot = player['latestSnapshot']
             # Try different paths to find skill data
             if isinstance(snapshot, dict):
-                # Path 1: latestSnapshot.data.skills.{skill}.experience
+                # Path 1: latestSnapshot.data.skills.{skill}
                 if 'data' in snapshot and isinstance(snapshot['data'], dict):
-                    if 'skills' in snapshot['data'] and isinstance(snapshot['data']['skills'], dict):
-                        if skill_name in snapshot['data']['skills']:
-                            return snapshot['data']['skills'][skill_name].get('experience', 0)
-                    # Path 2: latestSnapshot.data.{skill}.experience
-                    elif skill_name in snapshot['data']:
-                        return snapshot['data'][skill_name].get('experience', 0)
-                # Path 3: latestSnapshot.skills.{skill}.experience
+                    data = snapshot['data']
+                    if 'skills' in data and isinstance(data['skills'], dict):
+                        skills = data['skills']
+                        if skill_name in skills and isinstance(skills[skill_name], dict):
+                            skill_data = skills[skill_name]
+                            exp = skill_data.get('experience', 0)
+                            level = skill_data.get('level', 0)
+                    # Path 2: latestSnapshot.data.{skill}
+                    elif skill_name in data and isinstance(data[skill_name], dict):
+                        skill_data = data[skill_name]
+                        exp = skill_data.get('experience', 0)
+                        level = skill_data.get('level', 0)
+                # Path 3: latestSnapshot.skills.{skill}
                 elif 'skills' in snapshot and isinstance(snapshot['skills'], dict):
-                    if skill_name in snapshot['skills']:
-                        return snapshot['skills'][skill_name].get('experience', 0)
-            return 0
+                    skills = snapshot['skills']
+                    if skill_name in skills and isinstance(skills[skill_name], dict):
+                        skill_data = skills[skill_name]
+                        exp = skill_data.get('experience', 0)
+                        level = skill_data.get('level', 0)
+            
+            return (exp, level)
             
         # Sort players by skill experience using the helper function
         sorted_skill = sorted(
             filtered,
-            key=lambda x: get_skill_exp(x, skill),
+            key=lambda x: get_skill_data(x, skill)[0],  # Sort by experience
             reverse=True
         )
         
@@ -406,25 +469,9 @@ def build_messages(clan_data):
         for player in top_skill:
             username = player.get('username', 'Unknown')
             display_name = player.get('displayName', username)
-            exp = get_skill_exp(player, skill)
+            exp, level = get_skill_data(player, skill)
             
-            # Find the level directly or calculate it based on experience
-            level = 0
-            
-            # First try to get level directly from the data structure
-            if 'latestSnapshot' in player and player['latestSnapshot']:
-                snapshot = player['latestSnapshot']
-                if isinstance(snapshot, dict):
-                    if 'data' in snapshot and isinstance(snapshot['data'], dict):
-                        if 'skills' in snapshot['data'] and isinstance(snapshot['data']['skills'], dict):
-                            if skill in snapshot['data']['skills']:
-                                level = snapshot['data']['skills'][skill].get('level', 0)
-                        elif skill in snapshot['data']:
-                            level = snapshot['data'][skill].get('level', 0)
-                    elif 'skills' in snapshot and isinstance(snapshot['skills'], dict):
-                        if skill in snapshot['skills']:
-                            level = snapshot['skills'][skill].get('level', 0)
-            
+            # Add player to the message if they have any data for this skill
             if exp > 0 or level > 0:
                 msg2 += f"- {display_name} | Level: {level} | XP: {exp:,}\n"
                 player_added = True
