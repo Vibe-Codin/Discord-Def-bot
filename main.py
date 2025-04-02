@@ -114,27 +114,16 @@ class HighscoresBot(discord.Client):
         if message.author == self.user:
             return
         
-        if message.content.lower() == '!refresh':
+        if message.content.lower() == '!refresh' or message.content.lower() == '/clanhighscores':
             await message.channel.send("Refreshing highscores... Please wait a moment.")
             embed_or_error = await self.update_highscores(message)
             
             if isinstance(embed_or_error, str):
                 await message.channel.send(f"⚠️ {embed_or_error}")
             else:
-                if self.last_message:
-                    try:
-                        await self.last_message.edit(content="", embed=embed_or_error)
-                        await message.channel.send("Highscores updated!")
-                    except discord.errors.NotFound:
-                        new_message = await message.channel.send(embed=embed_or_error)
-                        self.last_message = new_message
-                    except discord.errors.Forbidden:
-                        await message.channel.send("⚠️ Could not update existing message. Here's the latest data:")
-                        new_message = await message.channel.send(embed=embed_or_error)
-                        self.last_message = new_message
-                else:
-                    new_message = await message.channel.send(embed=embed_or_error)
-                    self.last_message = new_message
+                # Always send a new message with the updated highscores
+                new_message = await message.channel.send(embed=embed_or_error)
+                self.last_message = new_message
 
 intents = discord.Intents.default()
 intents.message_content = True
