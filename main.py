@@ -26,11 +26,9 @@ intents.members = True
 intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents, activity=discord.Game(name="!clanhighscores"))
 
-# Global dictionary to store the message objects for updating
+# Global dictionary to store the message object for updating
 highscore_messages = {
-    "total": None,
-    "skills": None,
-    "bosses": None
+    "main": None
 }
 
 async def fetch_clan_data():
@@ -263,6 +261,76 @@ def format_bosses_message(clan_data: List[Dict]) -> str:
 
     return message
 
+class RefreshButton(discord.ui.View):
+    def __init__(self, bot_instance):
+        super().__init__(timeout=None)
+        self.bot = bot_instance
+
+    @discord.ui.button(label="Refresh Highscores", style=discord.ButtonStyle.primary, emoji="🔄")
+    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            clan_data = await fetch_clan_data()
+            if not clan_data:
+                await interaction.followup.send("Error fetching clan data. Please try again later.", ephemeral=True)
+                return
+
+            embed = create_highscores_embed(clan_data)
+            
+            # Update the message with new data
+            message = highscore_messages.get("main")
+            if message:
+                await message.edit(embed=embed, view=RefreshButton(self.bot))
+                await interaction.followup.send("Highscores refreshed!", ephemeral=True)
+            else:
+                await interaction.followup.send("Couldn't find the highscores message to update.", ephemeral=True)
+        except Exception as e:
+            print(f"Error refreshing highscores: {e}")
+            await interaction.followup.send(f"An error occurred while refreshing highscores: {str(e)}", ephemeral=True)
+
+def create_highscores_embed(clan_data):
+    """Create a Discord embed with the clan highscores"""
+    embed = discord.Embed(
+        title="OSRS Defence Clan Highscores",
+        description="Top players in OSRS Defence clan",
+        color=discord.Color.blue()
+    )
+    
+    # Add top 10 by total level
+    def get_total_level_and_exp(player: Dict) -> Tuple[int, int]:
+        if 'latestSnapshot' in player and player['latestSnapshot']:
+            data = player['latestSnapshot'].get('data', {})
+            skills = data.get('skills', {})
+            overall = skills.get('overall', {})
+            level = overall.get('level', 0)
+            exp = overall.get('experience', 0)
+            return (level, exp)
+        return (0, 0)
+
+    sorted_players = sorted(
+        clan_data, 
+        key=get_total_level_and_exp,
+        reverse=True
+    )
+    
+    top_players = sorted_players[:10]
+    
+    # Add top 10 by total level field
+    top_level_text = ""
+    for index, player in enumerate(top_players, 1):
+        username = player.get('username', 'Unknown')
+        display_name = player.get('displayName', username)
+        level, exp = get_total_level_and_exp(player)
+        top_level_text += f"**{index}.** {display_name} | Lvl: {level} | XP: {exp:,}\n"
+    
+    embed.add_field(name="Top 10 by Total Level", value=top_level_text or "No data available", inline=False)
+    
+    # Add timestamp and footer
+    embed.timestamp = discord.utils.utcnow()
+    embed.set_footer(text="Last updated")
+    
+    return embed
+
 @bot.tree.command(name="clanhighscores", description="Show clan highscores")
 async def clanhighscores(interaction: discord.Interaction):
     await interaction.response.defer()
@@ -272,26 +340,19 @@ async def clanhighscores(interaction: discord.Interaction):
             await interaction.followup.send("Error fetching clan data. Please try again later.")
             return
 
-        # Format messages
-        total_message = format_total_level_message(clan_data)
-        skills_message = format_skills_message(clan_data)
-        bosses_message = format_bosses_message(clan_data)
-
-        # Send or update messages
-        channel = interaction.channel
-        if highscore_messages["total"] is None:
-            highscore_messages["total"] = await channel.send(total_message)
-            highscore_messages["skills"] = await channel.send(skills_message)
-            highscore_messages["bosses"] = await channel.send(bosses_message)
-        else:
-            await highscore_messages["total"].edit(content=total_message)
-            await highscore_messages["skills"].edit(content=skills_message)
-            await highscore_messages["bosses"].edit(content=bosses_message)
-
-        await interaction.followup.send("Highscores updated!")
+        # Create an embed with the data
+        embed = create_highscores_embed(clan_data)
+        
+        # Create the view with refresh button
+        view = RefreshButton(bot)
+        
+        # Send the embed with the button
+        message = await interaction.followup.send(embed=embed, view=view)
+        highscore_messages["main"] = message
+        
     except Exception as e:
         print(f"Error in clanhighscores command: {e}")
-        await interaction.followup.send("An error occurred while updating highscores.")
+        await interaction.followup.send(f"An error occurred while updating highscores: {str(e)}")
 
 @tasks.loop(hours=24)
 async def update_highscores_task():
@@ -306,27 +367,22 @@ async def update_highscores_task():
             print("Error fetching clan data in background task.")
             return
 
-        # Format messages
-        total_message = format_total_level_message(clan_data)
-        skills_message = format_skills_message(clan_data)
-        bosses_message = format_bosses_message(clan_data)
+        # Create embed with current data
+        embed = create_highscores_embed(clan_data)
+        
+        # Create the view with refresh button
+        view = RefreshButton(bot)
 
-        # Send or update messages
-        if highscore_messages["total"] is None:
-            highscore_messages["total"] = await channel.send(total_message)
-            highscore_messages["skills"] = await channel.send(skills_message)
-            highscore_messages["bosses"] = await channel.send(bosses_message)
+        # Send or update message
+        if highscore_messages["main"] is None:
+            highscore_messages["main"] = await channel.send(embed=embed, view=view)
         else:
             try:
-                await highscore_messages["total"].edit(content=total_message)
-                await highscore_messages["skills"].edit(content=skills_message)
-                await highscore_messages["bosses"].edit(content=bosses_message)
+                await highscore_messages["main"].edit(embed=embed, view=view)
             except Exception as e:
-                print(f"Error editing messages: {e}")
-                # If editing fails, try sending new messages
-                highscore_messages["total"] = await channel.send(total_message)
-                highscore_messages["skills"] = await channel.send(skills_message)
-                highscore_messages["bosses"] = await channel.send(bosses_message)
+                print(f"Error editing message: {e}")
+                # If editing fails, try sending a new message
+                highscore_messages["main"] = await channel.send(embed=embed, view=view)
     except Exception as e:
         print(f"Error in update task: {e}")
 
