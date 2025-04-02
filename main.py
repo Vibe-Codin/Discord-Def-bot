@@ -102,6 +102,13 @@ class HighscoresBot(discord.Client):
                 # Print structure of the first entry for debugging
                 print(f"Debug - Structure of first entry in overall_hiscores:")
                 print(json.dumps(overall_hiscores[0], indent=2))
+                
+                # Check if we actually have data to display
+                print(f"Debug - Found {len(overall_hiscores)} players in the hiscores")
+                print(f"Debug - First player name: {overall_hiscores[0]['player']['displayName'] if 'player' in overall_hiscores[0] else 'Unknown'}")
+                
+                # Check if the field was added to the embed
+                print(f"Debug - Current embed fields: {len(embed.fields)}")
             
             # Get hiscores for individual skills
             skills = ['attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic']
@@ -138,6 +145,10 @@ class HighscoresBot(discord.Client):
             
             embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
             
+            # If the embed has no fields, add a message indicating no data was found
+            if len(embed.fields) == 0:
+                embed.description = f"No hiscores data found for {group_name}. Please make sure the group exists and has members."
+            
             return embed
         except Exception as e:
             return f"An error occurred while updating highscores: {str(e)}"
@@ -147,7 +158,7 @@ class HighscoresBot(discord.Client):
             return
         
         if message.content.lower() == '!refresh' or message.content.lower() == '/clanhighscores':
-            await message.channel.send("Refreshing highscores... Please wait a moment.")
+            processing_msg = await message.channel.send("Refreshing highscores... Please wait a moment.")
             print(f"DEBUG: Received command: {message.content}")
             
             embed_or_error = await self.update_highscores(message)
@@ -160,6 +171,13 @@ class HighscoresBot(discord.Client):
                 # Always send a new message with the updated highscores
                 new_message = await message.channel.send(embed=embed_or_error)
                 self.last_message = new_message
+                
+                # Delete the processing message after sending the embed
+                try:
+                    await processing_msg.delete()
+                except:
+                    pass
+                    
                 print("DEBUG: Message sent successfully")
 
 intents = discord.Intents.default()
