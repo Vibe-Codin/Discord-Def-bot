@@ -35,7 +35,7 @@ highscore_messages = {
 async def fetch_clan_data():
     try:
         async with aiohttp.ClientSession() as session:
-            url = f"{WISE_OLD_MAN_BASE_URL}/clan/{CLAN_ID}/members"
+            url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"  # Updated endpoint
             print(f"Fetching clan data from: {url}")
             async with session.get(url) as resp:
                 if resp.status != 200:
