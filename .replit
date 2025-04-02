@@ -26,19 +26,18 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python main.py"
-# Added automatic restart capability with higher failures allowed
 restart = "always"
 maxRestarts = 20
-restartDelay = 1500  # 1.5 second delay between restarts
+restartDelay = 1500
 
 [[workflows.workflow]]
-name = "Run With Debug"  
+name = "Run With Debug"
 author = 21610329
 mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python -u main.py"  # -u for unbuffered output
+args = "python -u main.py"
 restart = "always"
 maxRestarts = 10
 restartDelay = 3000
