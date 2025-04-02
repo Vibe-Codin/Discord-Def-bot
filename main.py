@@ -85,28 +85,48 @@ class HighscoresView(View):
 
     async def bosses_button_callback(self, interaction):
         try:
-            # Show a loading message to the user who clicked
-            await interaction.response.send_message("Switching to Bosses category... Please wait.", ephemeral=True)
+            # Check if we already have the bosses overview embed cached
+            bosses_overview_key = "bosses_overview"
+            using_cached = bosses_overview_key in self.cached_embeds
 
-            # Create a new view with bosses as active category
+            # Show appropriate loading message
+            if using_cached:
+                await interaction.response.send_message("Switching to Bosses category... (using cached data)", ephemeral=True)
+            else:
+                await interaction.response.send_message("Switching to Bosses category... Please wait while loading data.", ephemeral=True)
+
+            # Create a new view with bosses as active category immediately
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
 
             # Get a generic bosses overview embed or create one
-            bosses_overview_key = "bosses_overview"
-
-            if bosses_overview_key in self.cached_embeds:
+            if using_cached:
                 embed = self.cached_embeds[bosses_overview_key]
                 # Update the timestamp to show it's current
                 embed.timestamp = datetime.now()
+                print("Using cached bosses overview data")
             else:
+                print("Need to create new bosses overview embed")
                 embed = await self.bot.create_bosses_overview_embed()
                 if isinstance(embed, discord.Embed):
                     embed.timestamp = datetime.now()
                     self.cached_embeds[bosses_overview_key] = embed
+                    # Store cache time for this embed
+                    self.bot.cache_times[bosses_overview_key] = time.time()
 
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
-                await interaction.edit_original_response(content="✅ Switched to Bosses category")
+
+                if using_cached:
+                    # Get cache age
+                    cache_age = 0
+                    if hasattr(self.bot, 'cache_times') and bosses_overview_key in self.bot.cache_times:
+                        cache_age = time.time() - self.bot.cache_times[bosses_overview_key]
+                        time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
+                        await interaction.edit_original_response(content=f"✅ Switched to Bosses category (cached from {time_ago} ago)")
+                    else:
+                        await interaction.edit_original_response(content=f"✅ Switched to Bosses category")
+                else:
+                    await interaction.edit_original_response(content="✅ Switched to Bosses category (freshly loaded)")
             except discord.errors.HTTPException as e:
                 print(f"Error editing message in bosses button: {str(e)}")
                 try:
@@ -118,7 +138,7 @@ class HighscoresView(View):
         except Exception as e:
             print(f"Error in bosses_button_callback: {str(e)}")
             try:
-                await interaction.edit_original_response(content="❌ An error occurred while processing your request")
+                await interaction.edit_original_response(content=f"❌ An error occurred: {str(e)}")
             except:
                 print("Could not update error message")
 
