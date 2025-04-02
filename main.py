@@ -1329,9 +1329,9 @@ async def on_ready():
 
 # Set up slash commands
 @client.tree.command(name="clanhighscores", description="Display the clan highscores")
-    async def clanhighscores(interaction):
-        # Defer with ephemeral=False to show loading to everyone
-        await interaction.response.defer(thinking=True, ephemeral=False)
+async def clanhighscores(interaction):
+    # Defer with ephemeral=False to show loading to everyone
+    await interaction.response.defer(thinking=True, ephemeral=False)
 
         try:
             # Check if we have cached data first
@@ -1376,9 +1376,9 @@ async def on_ready():
             print(f"Error in clanhighscores command: {str(e)}")
 
     @client.tree.command(name="refresh", description="Refresh the clan highscores")
-    async def refresh(interaction):
-        # Defer with ephemeral=True to only show loading to the user who triggered it
-        await interaction.response.defer(thinking=True, ephemeral=True)
+async def refresh(interaction):
+    # Defer with ephemeral=True to only show loading to the user who triggered it
+    await interaction.response.defer(thinking=True, ephemeral=True)
 
         try:
             # Send a quick response to avoid timeout
@@ -1412,9 +1412,9 @@ async def on_ready():
             print(f"Error in refresh command: {str(e)}")
 
     @client.tree.command(name="freshembed", description="Create a fresh highscores embed")
-    async def freshembed(interaction):
-        # Defer with ephemeral=True to only show loading to the user who triggered it
-        await interaction.response.defer(thinking=True, ephemeral=True)
+async def freshembed(interaction):
+    # Defer with ephemeral=True to only show loading to the user who triggered it
+    await interaction.response.defer(thinking=True, ephemeral=True)
 
         try:
             # Send a quick ephemeral response to the user who triggered the command
@@ -1447,8 +1447,8 @@ async def on_ready():
             print(f"Error in freshembed command: {str(e)}")
 
     @client.tree.command(name="new", description="Push a new highscores embed without refreshing cache")
-    async def new_embed(interaction):
-        await interaction.response.defer(thinking=True, ephemeral=True)
+async def new_embed(interaction):
+    await interaction.response.defer(thinking=True, ephemeral=True)
 
         try:
             await interaction.followup.send("Creating a new highscores embed without refreshing cache...", ephemeral=True)
@@ -1477,8 +1477,8 @@ async def on_ready():
             print(f"Error in new_embed command: {str(e)}")
 
     @client.tree.command(name="refreshcache", description="Refresh highscores cache and push a new embed")
-    async def refresh_cache(interaction):
-        await interaction.response.defer(thinking=True, ephemeral=True)
+async def refresh_cache(interaction):
+    await interaction.response.defer(thinking=True, ephemeral=True)
 
         try:
             await interaction.followup.send("Refreshing highscores cache and creating a new embed...", ephemeral=True)
@@ -1506,18 +1506,8 @@ async def on_ready():
             await interaction.followup.send(f"Error refreshing cache: {str(e)}", ephemeral=True)
             print(f"Error in refresh_cache command: {str(e)}")
 
-    # Sync the commands with Discord
-    print("Syncing commands with Discord...")
-    try:
-        # Clear any existing commands first
-        client.tree.clear_commands(guild=None)
-        # Register the commands to the tree
-
-        # Sync the commands globally (may take up to an hour to propagate)
-        await client.tree.sync()
-        print("Commands synced successfully!")
-    except Exception as e:
-        print(f"Error syncing commands: {str(e)}")
+    # Command registration is complete
+    print("All commands registered to the tree")
 
 # Run the bot
 client.run(TOKEN)
