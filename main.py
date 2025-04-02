@@ -48,7 +48,7 @@ async def fetch_clan_data():
                 async with session.get(hiscores_url, headers=headers) as hiscores_response:
                     if hiscores_response.status == 200:
                         hiscores_data = await hiscores_response.json()
-                        
+
                         # Extract player data from hiscores
                         player_data = []
                         player_ids = []
@@ -58,23 +58,23 @@ async def fetch_clan_data():
                                 # Track player IDs for deduplication later
                                 if 'id' in entry['player']:
                                     player_ids.append(entry['player']['id'])
-                        
+
                         if len(player_data) > 0:
                             print(f"Successfully fetched hiscores data for {len(player_data)} players")
-                            
+
                             # Now fetch detailed data for top 20 players
                             detailed_players = []
                             top_players = sorted(player_data, key=lambda p: p.get('exp', 0) if isinstance(p.get('exp'), (int, float)) else 0, reverse=True)[:20]
-                            
+
                             for player in top_players:
                                 username = player.get('username')
                                 if not username:
                                     continue
-                                
+
                                 # Add slight delay to avoid rate limiting
                                 await asyncio.sleep(0.2)
                                 player_details_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
-                                
+
                                 try:
                                     async with session.get(player_details_url, headers=headers) as player_response:
                                         if player_response.status == 200:
@@ -83,7 +83,7 @@ async def fetch_clan_data():
                                                 detailed_players.append(player_details)
                                 except Exception as player_error:
                                     print(f"Error fetching detailed data for {username}: {player_error}")
-                            
+
                             # Add boss hiscores data separately to ensure we get boss KC
                             for boss in ["zulrah", "vorkath", "chambers_of_xeric", "tombs_of_amascut"]:
                                 boss_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores?metric={boss}&limit=10"
@@ -97,29 +97,29 @@ async def fetch_clan_data():
                                                     player_ids.append(entry['player'].get('id'))
                                 except Exception as boss_error:
                                     print(f"Error fetching {boss} data: {boss_error}")
-                            
+
                             # Combine detailed players with the regular data
                             combined_data = []
-                            
+
                             # First add all detailed players
                             for detailed_player in detailed_players:
                                 player_id = detailed_player.get('id')
                                 if player_id:
                                     combined_data.append(detailed_player)
                                     player_ids.remove(player_id) if player_id in player_ids else None
-                            
+
                             # Then add remaining players that weren't part of the detailed fetch
                             for player in player_data:
                                 player_id = player.get('id')
                                 if player_id in player_ids:
                                     combined_data.append(player)
-                            
+
                             return combined_data
                     else:
                         print(f"Failed to fetch hiscores data: {hiscores_response.status}")
             except Exception as hiscores_error:
                 print(f"Error fetching hiscores: {hiscores_error}")
-            
+
             # Fallback to getting group details and then individual player data
             group_details_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
             async with session.get(group_details_url, headers=headers) as group_response:
@@ -141,7 +141,7 @@ async def fetch_clan_data():
                                             # Check if we already have this player
                                             if not any(p.get('id') == entry['player'].get('id') for p in player_data):
                                                 player_data.append(entry['player'])
-                        
+
                         if len(player_data) > 0:
                             print(f"Successfully fetched {len(player_data)} players from general hiscores")
                             return player_data
@@ -161,24 +161,24 @@ async def fetch_clan_data():
                 for membership in group_data.get('memberships', []):
                     if 'player' in membership and membership['player']:
                         player_data.append(membership['player'])
-                
+
                 if len(player_data) > 0:
                     print(f"Retrieved {len(player_data)} players from group memberships")
-                    
+
                     # Try to get more detailed data for the top 10 players
                     import asyncio
                     detailed_players = []
-                    
+
                     # Only fetch the first 10 players to avoid rate limits
                     top_players = sorted(player_data, key=lambda p: p.get('exp', 0), reverse=True)[:10]
                     for player in top_players:
                         username = player.get('username')
                         if not username:
                             continue
-                            
+
                         # Add delay between requests to avoid rate limiting
                         await asyncio.sleep(0.3)
-                        
+
                         player_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
                         try:
                             async with session.get(player_url, headers=headers) as player_response:
@@ -191,32 +191,32 @@ async def fetch_clan_data():
                         except Exception:
                             # If error, just use what we have
                             detailed_players.append(player)
-                    
+
                     # Combine detailed players with the rest
                     for detailed_player in detailed_players:
                         # Remove original player
                         player_data = [p for p in player_data if p.get('id') != detailed_player.get('id')]
                         # Add detailed player
                         player_data.append(detailed_player)
-                        
+
                     return player_data
-                
+
                 # If we couldn't get any players from memberships, try individual player fetching
                 member_usernames = [membership.get('player', {}).get('username') 
                                   for membership in group_data.get('memberships', [])
                                   if membership.get('player', {}).get('username')]
-                
+
                 print(f"Found {len(member_usernames)} members in the clan")
-                
+
                 import asyncio
                 # Only fetch the first 20 players to avoid rate limits
                 limited_members = member_usernames[:20]
                 player_data = []
-                
+
                 for username in limited_members:
                     # Add delay between requests to avoid rate limiting
                     await asyncio.sleep(0.3)
-                    
+
                     player_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
                     try:
                         async with session.get(player_url, headers=headers) as player_response:
@@ -227,7 +227,7 @@ async def fetch_clan_data():
                                 print(f"Failed to fetch data for player {username}: {player_response.status}")
                     except Exception as player_error:
                         print(f"Error fetching player {username}: {player_error}")
-                
+
                 print(f"Successfully fetched data for {len(player_data)} players")
                 return player_data if player_data else None
 
@@ -457,49 +457,70 @@ class RefreshButton(discord.ui.View):
     @discord.ui.button(label="Refresh Highscores", style=discord.ButtonStyle.primary, emoji="🔄", custom_id="refresh_highscores_button")
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            # Defer the response to buy time for processing
-            await interaction.response.defer(ephemeral=True)
-            
-            print(f"Refresh button clicked by {interaction.user}")
-            clan_data = await fetch_clan_data()
-            
-            if not clan_data:
-                await interaction.followup.send("Error fetching clan data. Please try again later.", ephemeral=True)
-                return
+            # Defer the response to buy time for processing, specify thinking is true
+            await interaction.response.defer(ephemeral=True, thinking=True)
 
-            # Create a new embed with updated data
-            embed = create_highscores_embed(clan_data)
-            
-            # Create a new view for the updated message
-            view = RefreshButton(self.bot)
-            
+            print(f"Refresh button clicked by {interaction.user}")
+
             try:
-                # Get the original message via the message that triggered this interaction
-                message = interaction.message
-                if message:
-                    await message.edit(embed=embed, view=view)
-                    highscore_messages["main"] = message
-                    await interaction.followup.send("✅ Highscores updated successfully!", ephemeral=True)
-                else:
-                    # Fallback if we can't get the interaction message
+                clan_data = await fetch_clan_data()
+
+                if not clan_data:
+                    try:
+                        await interaction.followup.send("Error fetching clan data. Please try again later.", ephemeral=True)
+                    except discord.NotFound:
+                        # If interaction expires, try to message the channel
+                        await interaction.channel.send("Error fetching clan data. Please try again later.")
+                    return
+
+                # Create a new embed with updated data
+                embed = create_highscores_embed(clan_data)
+
+                # Create a new view for the updated message
+                view = RefreshButton(self.bot)
+
+                try:
+                    # Get the original message via the message that triggered this interaction
+                    message = interaction.message
+                    if message:
+                        await message.edit(embed=embed, view=view)
+                        highscore_messages["main"] = message
+
+                        try:
+                            await interaction.followup.send("✅ Highscores updated successfully!", ephemeral=True)
+                        except discord.NotFound:
+                            # If interaction expires, try with a new message
+                            await interaction.channel.send("✅ Highscores updated successfully!")
+                    else:
+                        # Fallback if we can't get the interaction message
+                        channel = interaction.channel
+                        new_message = await channel.send(embed=embed, view=view)
+                        highscore_messages["main"] = new_message
+
+                        try:
+                            await interaction.followup.send("✅ Created new highscores message!", ephemeral=True)
+                        except discord.NotFound:
+                            pass  # Already sent the new message to the channel
+                except Exception as edit_error:
+                    print(f"Error updating message: {edit_error}")
+                    # Send a new message if editing fails
                     channel = interaction.channel
-                    new_message = await channel.send(embed=embed, view=view)
+                    new_message = await channel.send("⚠️ Could not update existing message. Here's the latest data:", embed=embed, view=view)
                     highscore_messages["main"] = new_message
-                    await interaction.followup.send("✅ Created new highscores message!", ephemeral=True)
-            except Exception as edit_error:
-                print(f"Error updating message: {edit_error}")
-                # Send a new message if editing fails
-                channel = interaction.channel
-                new_message = await channel.send("⚠️ Could not update existing message. Here's the latest data:", embed=embed, view=view)
-                highscore_messages["main"] = new_message
+            except Exception as data_error:
+                print(f"Error fetching or processing data: {data_error}")
+                try:
+                    await interaction.followup.send(f"An error occurred: {str(data_error)}", ephemeral=True)
+                except discord.NotFound:
+                    # If interaction expired, try channel
+                    await interaction.channel.send(f"An error occurred during refresh: {str(data_error)}")
         except Exception as e:
             print(f"Error in refresh button handler: {e}")
             try:
-                await interaction.followup.send(f"An error occurred: {str(e)}", ephemeral=True)
-            except:
-                # Handle already-responded error
                 channel = interaction.channel
                 await channel.send(f"An error occurred during refresh: {str(e)}")
+            except:
+                pass  # Last resort failed, nothing more we can do
 
 def create_highscores_embed(clan_data):
     """Create a Discord embed with the clan highscores"""
@@ -523,7 +544,7 @@ def create_highscores_embed(clan_data):
                     exp = overall.get('experience', 0)
                     if level > 0 or exp > 0:
                         return (level, exp)
-            
+
             # Check stats directly 
             if player.get('stats') and 'overall' in player.get('stats', {}):
                 overall = player['stats'].get('overall', {})
@@ -531,22 +552,22 @@ def create_highscores_embed(clan_data):
                 exp = overall.get('experience', 0)
                 if level > 0 or exp > 0:
                     return (level, exp)
-            
+
             # Check if exp is directly on the player object
             if isinstance(player.get('exp'), (int, float)) and player['exp'] > 0:
                 exp = player['exp']
                 # Estimate level based on exp
                 level = min(2277, max(3, int(exp / 100000))) 
                 return (level, exp)
-                
+
             # If player has neither stats nor latestSnapshot but has total level
             if isinstance(player.get('ehp'), (int, float)) and player['ehp'] > 0:
                 # Estimate from EHP
                 return (int(player['ehp'] * 10), int(player['ehp'] * 100000))
-                
+
         except Exception as e:
             print(f"Error extracting data for {player.get('username', 'Unknown')}: {e}")
-        
+
         return (0, 0)
 
     # Sort players by total level and exp
@@ -569,10 +590,10 @@ def create_highscores_embed(clan_data):
         top_level_text += f"**{index}.** {display_name} | Lvl: {level} | XP: {exp:,}\n"
 
     embed.add_field(name="Top 10 by Total Level", value=top_level_text or "No data available", inline=False)
-    
+
     # Add top skills section - include primary combat skills
     key_skills = ["attack", "defence", "strength", "hitpoints", "ranged", "prayer", "magic"]
-    
+
     for skill in key_skills:
         # Define a function to get skill level and experience
         def get_skill_data(player: Dict) -> Tuple[int, int]:
@@ -587,7 +608,7 @@ def create_highscores_embed(clan_data):
                         exp = skill_data.get('experience', 0)
                         if level > 0 or exp > 0:
                             return (level, exp)
-                
+
                 # Try to get from stats directly
                 if player.get('stats') and skill in player.get('stats', {}):
                     skill_data = player['stats'].get(skill, {})
@@ -595,7 +616,7 @@ def create_highscores_embed(clan_data):
                     exp = skill_data.get('experience', 0)
                     if level > 0 or exp > 0:
                         return (level, exp)
-                        
+
                 # If getting from direct fields didn't work, try to estimate from the player's other fields
                 if isinstance(player.get('exp'), (int, float)) and player['exp'] > 0:
                     total_exp = player['exp']
@@ -608,27 +629,27 @@ def create_highscores_embed(clan_data):
                         est_level = min(99, max(1, int((total_exp / 1200000) * 3)))
                         est_exp = int(total_exp / 12)
                         return (est_level, est_exp)
-                    
+
             except Exception as e:
                 print(f"Error getting {skill} data for {player.get('username', 'Unknown')}: {e}")
             return (0, 0)
 
         # Get players with non-zero skill data
         valid_skill_players = [p for p in clan_data if get_skill_data(p)[0] > 0]
-        
+
         # Sort players by skill level, then by experience
         skill_sorted = sorted(
             valid_skill_players,
             key=lambda p: (get_skill_data(p)[0], get_skill_data(p)[1]),
             reverse=True
         )[:5]  # Top 5 to keep embed manageable
-        
+
         skill_text = ""
         for index, player in enumerate(skill_sorted, 1):
             display_name = player.get('displayName', player.get('username', 'Unknown'))
             level, exp = get_skill_data(player)
             skill_text += f"{index}. {display_name} ({level})\n"
-        
+
         if skill_text:
             embed.add_field(name=skill.title(), value=skill_text, inline=True)
         else:
@@ -637,10 +658,10 @@ def create_highscores_embed(clan_data):
     # Add a field for boss KC
     # Most common bosses
     popular_bosses = ["zulrah", "vorkath", "chambers_of_xeric", "tombs_of_amascut", "the_gauntlet", "theatre_of_blood"]
-    
+
     for boss_name in popular_bosses:
         boss_text = ""
-        
+
         def get_boss_kc(player: Dict) -> int:
             try:
                 if player.get('latestSnapshot') and player['latestSnapshot'].get('data') and player['latestSnapshot']['data'].get('bosses'):
@@ -656,16 +677,16 @@ def create_highscores_embed(clan_data):
             except Exception as e:
                 print(f"Error getting KC for {boss_name} from {player.get('username', 'Unknown')}: {e}")
             return 0
-        
+
         boss_players = [p for p in clan_data if get_boss_kc(p) > 0]
         sorted_boss_players = sorted(boss_players, key=get_boss_kc, reverse=True)[:3]
-        
+
         for idx, player in enumerate(sorted_boss_players, 1):
             kc = get_boss_kc(player)
             if kc > 0:
                 display_name = player.get('displayName', player.get('username', 'Unknown'))
                 boss_text += f"{idx}. {display_name}: {kc} KC\n"
-        
+
         if boss_text:
             embed.add_field(
                 name=boss_name.replace('_', ' ').title(), 
@@ -684,7 +705,7 @@ async def clanhighscores(interaction: discord.Interaction):
     try:
         # Defer the response to buy time for processing
         await interaction.response.defer(ephemeral=True)
-        
+
         clan_data = await fetch_clan_data()
         if not clan_data:
             await interaction.followup.send("Error fetching clan data. Please try again later.")
@@ -700,7 +721,7 @@ async def clanhighscores(interaction: discord.Interaction):
         channel = interaction.channel
         message = await channel.send(embed=embed, view=view)
         highscore_messages["main"] = message
-        
+
         # Send confirmation to the user
         await interaction.followup.send("✅ Highscores posted to channel!", ephemeral=True)
 
@@ -725,17 +746,17 @@ async def highscores(ctx):
             if not clan_data:
                 await ctx.send("Error fetching clan data. Please try again later.")
                 return
-                
+
             # Create an embed with the data
-            embed = create_highscores_embed(clan_data)
-            
+            embed =create_highscores_embed(clan_data)
+
             # Create the view with refresh button
             view = RefreshButton(bot)
-            
+
             # Send the embed with the button
             message = await ctx.send(embed=embed, view=view)
             highscore_messages["main"] = message
-            
+
         except Exception as e:
             print(f"Error in highscores command: {e}")
             await ctx.send(f"An error occurred while updating highscores: {str(e)}")
@@ -782,11 +803,11 @@ async def on_ready():
     try:
         await bot.tree.sync()
         print("Successfully synced application commands")
-        
+
         # Register the persistent view for the refresh button
         bot.add_view(RefreshButton(bot))
         print("Registered persistent view for refresh button")
-        
+
         # Try to retrieve existing highscores messages and add views to them
         if CHANNEL_ID:
             try:
@@ -804,14 +825,14 @@ async def on_ready():
                                 break
             except Exception as hist_error:
                 print(f"Error retrieving channel history: {hist_error}")
-        
+
         # Start the automatic update task
         if not update_highscores_task.is_running():
             update_highscores_task.start()
             print("Started highscores update task")
     except Exception as e:
         print(f"Error during startup: {e}")
-    
+
     print("Bot is ready! Try !ping to test or /clanhighscores to view OSRS clan highscores")
 
 if __name__ == "__main__":
