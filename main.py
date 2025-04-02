@@ -5,7 +5,7 @@ import aiohttp
 import os
 
 # Set your Wise Old Man clan ID, channel ID, and base URL
-CLAN_ID = "2277"  # OSRS Defence clan ID
+CLAN_ID = "2763"  # OSRS Defence clan ID
 WISE_OLD_MAN_BASE_URL = "https://api.wiseoldman.net/v3"  # Updated to v3
 CHANNEL_ID = 969159797058437170  # OSRS Defence Discord channel
 TOKEN = os.getenv('DISCORD_TOKEN', '')  # Get from environment variable
