@@ -33,7 +33,7 @@ class HighscoresBot(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.wom_client = WOMClient()
-        self.GROUP_ID = 4357  # Group ID for OSRS Defence clan (update this if different)
+        self.GROUP_ID = 2763  # Group ID for OSRS Defence clan
         self.last_message = None
 
     async def on_ready(self):
