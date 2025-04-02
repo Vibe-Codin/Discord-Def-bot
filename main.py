@@ -205,48 +205,37 @@ class HighscoresBot(discord.Client):
             # Get individual player details for combat skill levels
             player_details = await self.wom_client.get_player_details(player_name)
             
-            # If we can't get details for a player, assume they meet the criteria
-            # This is a change from previous behavior where we excluded players we couldn't validate
+            # If we can't get details for a player, we should not include them
+            # This is critical because we can't verify their combat stats
             if not player_details:
-                print(f"Note: Couldn't fetch details for player {player_name}, assuming they meet criteria")
-                return True
+                print(f"Player {player_name} excluded: Could not fetch details")
+                return False
                 
-            # If we have player data but no skills data, assume they meet criteria
+            # If we have player data but no skills data, we should not include them
             if 'data' not in player_details or 'skills' not in player_details['data']:
-                print(f"Note: No skills data for player {player_name}, assuming they meet criteria")
-                return True
+                print(f"Player {player_name} excluded: No skills data available")
+                return False
 
             skills = player_details['data']['skills']
 
-            # Check combat levels - default to 1 if not found (this is key change)
-            # If a skill isn't listed, it's likely level 1
-            combat_levels = {
-                'attack': skills.get('attack', {}).get('level', 1),  # Default to level 1 if not found
-                'strength': skills.get('strength', {}).get('level', 1),
-                'magic': skills.get('magic', {}).get('level', 1),
-                'ranged': skills.get('ranged', {}).get('level', 1)
-            }
+            # These are the skills we're checking (must be 2 or less)
+            restricted_skills = ['attack', 'strength', 'magic', 'ranged']
             
-            print(f"Player {player_name} combat levels - Attack: {combat_levels['attack']}, Strength: {combat_levels['strength']}, Magic: {combat_levels['magic']}, Ranged: {combat_levels['ranged']}")
-
-            # Check all combat skills must be 2 or less (except Defence, Hitpoints, Prayer)
-            if combat_levels['attack'] > 2:
-                print(f"Player {player_name} excluded: Attack level {combat_levels['attack']} > 2")
-                return False
-                
-            if combat_levels['strength'] > 2:
-                print(f"Player {player_name} excluded: Strength level {combat_levels['strength']} > 2")
-                return False
-                
-            if combat_levels['magic'] > 2:
-                print(f"Player {player_name} excluded: Magic level {combat_levels['magic']} > 2")
-                return False
-                
-            if combat_levels['ranged'] > 2:
-                print(f"Player {player_name} excluded: Ranged level {combat_levels['ranged']} > 2")
-                return False
+            # Check each restricted skill
+            for skill_name in restricted_skills:
+                # If the skill exists in their data
+                if skill_name in skills:
+                    skill_level = skills[skill_name].get('level', 0)
+                    
+                    # If level is more than 2, exclude the player
+                    if skill_level > 2:
+                        print(f"Player {player_name} excluded: {skill_name.capitalize()} level {skill_level} > 2")
+                        return False
+                else:
+                    # If skill is not in their data, assume it's level 1 (this is fine)
+                    print(f"Player {player_name}: {skill_name.capitalize()} not found, assuming level 1")
             
-            # Note: Defence, Hitpoints, and Prayer can be any level
+            # All checks passed, player meets requirements
             print(f"Player {player_name} validated - meets requirements (≤ 2 in Attack/Strength/Magic/Ranged)")
             return True
         except Exception as e:
