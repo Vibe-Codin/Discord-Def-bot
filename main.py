@@ -39,13 +39,18 @@ async def fetch_clan_data():
     try:
         headers = {
             'Accept': 'application/json',
-            'User-Agent': 'Discord-Bot/1.0'
+            'User-Agent': 'Discord-Bot/1.0',
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
         }
         async with aiohttp.ClientSession() as session:
             # First fetch group members list
             url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members/stats"
             print(f"Fetching group members from: {url}")
             async with session.get(url, headers=headers) as resp:
+                print(f"Response status: {resp.status}")
+                print(f"Response headers: {dict(resp.headers)}")
+                
                 if resp.status == 404:
                     print("Group not found. Please verify the group ID.")
                     return None
@@ -55,16 +60,23 @@ async def fetch_clan_data():
                     print(f"Error response: {error_text}")
                     return None
                 
+                content_type = resp.headers.get('Content-Type', '')
+                print(f"Content-Type: {content_type}")
+                
                 try:
-                    members_data = await resp.json()
+                    text_data = await resp.text()
+                    print(f"Raw response text: {text_data[:200]}")
+                    if not text_data:
+                        print("Empty response received")
+                        return None
+                        
+                    members_data = json.loads(text_data) if text_data else None
                     if not members_data:
                         print("Empty members data received from API")
                         return None
                     return members_data
                 except Exception as e:
                     print(f"Error parsing response: {e}")
-                    text_data = await resp.text()
-                    print(f"Raw response: {text_data[:200]}...")
                     return None
                 
                 print(f"Successfully fetched data for {len(players)} members")
