@@ -154,8 +154,8 @@ class SkillsDropdown(discord.ui.Select):
 
     async def callback(self, interaction):
         try:
-            # Use defer with ephemeral=True to show loading only to the user who clicked
-            await interaction.response.defer(ephemeral=True)
+            # Show a loading message to the user who clicked
+            await interaction.response.send_message("Loading skill data... Please wait.", ephemeral=True)
 
             selected_value = self.values[0]
             current_time = time.time()
@@ -188,7 +188,7 @@ class SkillsDropdown(discord.ui.Select):
 
             # Create a new HighscoresView with cached embeds to replace the existing view
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
-            
+
             edited = False
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
@@ -216,7 +216,7 @@ class SkillsDropdown(discord.ui.Select):
                     print(f"Error sending followup: {str(e)}")
             else:
                 await interaction.followup.send("Failed to update the highscores display", ephemeral=True)
-                
+
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0] if hasattr(self, 'values') and self.values else 'unknown'}")
         except Exception as e:
@@ -264,8 +264,8 @@ class BossesDropdown(discord.ui.Select):
 
     async def callback(self, interaction):
         try:
-            # Use defer with ephemeral=True to show loading only to the user who clicked
-            await interaction.response.defer(ephemeral=True)
+            # Show a loading message to the user who clicked
+            await interaction.response.send_message("Loading boss data... Please wait.", ephemeral=True)
 
             selected_value = self.values[0]
             current_time = time.time()
@@ -300,7 +300,7 @@ class BossesDropdown(discord.ui.Select):
 
             # Create a new HighscoresView with cached embeds to replace the existing view
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
-            
+
             edited = False
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
@@ -328,7 +328,7 @@ class BossesDropdown(discord.ui.Select):
                     print(f"Error sending followup: {str(e)}")
             else:
                 await interaction.followup.send("Failed to update the highscores display", ephemeral=True)
-                
+
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0] if hasattr(self, 'values') and self.values else 'unknown'}")
         except Exception as e:
@@ -1343,7 +1343,7 @@ class HighscoresBot(discord.Client):
                 print("DEBUG: Message sent successfully")
 
         elif message.content.lower() == '!refresh':
-            # For !refresh, we update the last sent message if it exists
+            # For !refresh, we update the last sent message if itexists:
             if self.last_message is None:
                 await message.channel.send("No highscores message to refresh. Please use `/clanhighscores` first.")
                 return
@@ -1478,10 +1478,10 @@ async def on_ready():
             # Clear all existing commands before adding the ones we want
             print("Clearing existing commands...")
             client.tree.clear_commands(guild=None)
-            
+
             # Only register the 'new' and 'refreshcache' commands
             print("Registering only /new and /refreshcache commands...")
-            
+
             # Add commands explicitly before syncing
             @client.tree.command(name="new", description="Push a new highscores embed without refreshing cache")
             @app_commands.checks.cooldown(1, 30.0, key=lambda i: i.guild_id)
@@ -1531,7 +1531,7 @@ async def on_ready():
                 except Exception as e:
                     await interaction.followup.send(f"Error refreshing cache: {str(e)}", ephemeral=True)
                     print(f"Error in refresh_cache command: {str(e)}")
-            
+
             # Sync the commands globally (may take up to an hour to propagate)
             print("Syncing command tree...")
             await client.tree.sync()
@@ -1540,7 +1540,7 @@ async def on_ready():
             commands_after = client.tree.get_commands()
             print(f"Commands synced successfully! Commands in tree: {len(commands_after)}")
             print(f"Available commands: {[cmd.name for cmd in commands_after]}")
-            
+
             # If no commands were synced, try one more additional sync
             if len(commands_after) == 0:
                 print("No commands found after sync, attempting one more sync...")
@@ -1548,7 +1548,7 @@ async def on_ready():
                 await client.tree.sync()
                 commands_after = client.tree.get_commands()
                 print(f"Second sync attempt: {len(commands_after)} commands")
-            
+
             break
         except Exception as e:
             retry_count += 1
