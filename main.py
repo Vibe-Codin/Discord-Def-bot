@@ -7,38 +7,51 @@ from datetime import datetime
 
 # Custom View for Highscores buttons
 class HighscoresView(View):
-    def __init__(self, bot):
+    def __init__(self, bot, cached_embeds=None):
         super().__init__(timeout=None)  # No timeout for the view
         self.bot = bot
-        
+        self.cached_embeds = cached_embeds or {}
+
         # Add the three buttons
         total_btn = Button(style=discord.ButtonStyle.primary, label="Total Level", custom_id="total")
         skills_btn = Button(style=discord.ButtonStyle.primary, label="Skills", custom_id="skills")
         bosses_btn = Button(style=discord.ButtonStyle.primary, label="Bosses", custom_id="bosses")
-        
+
         # Add button click handlers
         total_btn.callback = self.total_callback
         skills_btn.callback = self.skills_callback
         bosses_btn.callback = self.bosses_callback
-        
+
         # Add buttons to the view
         self.add_item(total_btn)
         self.add_item(skills_btn)
         self.add_item(bosses_btn)
-    
+
     async def total_callback(self, interaction):
         await interaction.response.defer()
-        embed = await self.bot.update_highscores(view_type="total")
+        if "total" in self.cached_embeds:
+            embed = self.cached_embeds["total"]
+        else:
+            embed = await self.bot.update_highscores(view_type="total")
+            self.cached_embeds["total"] = embed
         await interaction.message.edit(embed=embed, view=self)
-    
+
     async def skills_callback(self, interaction):
         await interaction.response.defer()
-        embed = await self.bot.update_highscores(view_type="skills")
+        if "skills" in self.cached_embeds:
+            embed = self.cached_embeds["skills"]
+        else:
+            embed = await self.bot.update_highscores(view_type="skills")
+            self.cached_embeds["skills"] = embed
         await interaction.message.edit(embed=embed, view=self)
-    
+
     async def bosses_callback(self, interaction):
         await interaction.response.defer()
-        embed = await self.bot.update_highscores(view_type="bosses")
+        if "bosses" in self.cached_embeds:
+            embed = self.cached_embeds["bosses"]
+        else:
+            embed = await self.bot.update_highscores(view_type="bosses")
+            self.cached_embeds["bosses"] = embed
         await interaction.message.edit(embed=embed, view=self)
 
 # Discord bot token
@@ -72,6 +85,7 @@ class HighscoresBot(discord.Client):
         self.wom_client = WOMClient()
         self.GROUP_ID = 2763  # Group ID for OSRS Defence clan
         self.last_message = None
+        self.cached_embeds = {}
 
     async def on_ready(self):
         print(f'{self.user} has connected to Discord!')
@@ -233,7 +247,7 @@ class HighscoresBot(discord.Client):
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
         return embed
 
-    async def update_highscores(self, message=None, view_type="total"):
+    async def update_highscores(self, message=None, view_type="total", force_refresh=False):
         try:
             # Get group details
             group_details = await self.wom_client.get_group_hiscores(self.GROUP_ID)
@@ -260,6 +274,9 @@ class HighscoresBot(discord.Client):
             if embed is None:
                 return "Could not create highscores embed"
 
+            if not force_refresh:
+                self.cached_embeds[view_type] = embed
+
             return embed
         except Exception as e:
             return f"An error occurred while updating highscores: {str(e)}"
@@ -280,9 +297,9 @@ class HighscoresBot(discord.Client):
                 await message.channel.send(f"⚠️ {embed_or_error}")
             else:
                 print("DEBUG: Successfully created embed, sending to channel")
-                # Create view with buttons for switching between views
-                view = HighscoresView(self)
-                
+                # Create view with buttons and pass cached embeds
+                view = HighscoresView(self, self.cached_embeds)
+
                 # Send a new message with the highscores and buttons
                 new_message = await message.channel.send(embed=embed_or_error, view=view)
                 self.last_message = new_message
@@ -304,7 +321,8 @@ class HighscoresBot(discord.Client):
             processing_msg = await message.channel.send("Refreshing highscores... Please wait a moment.")
             print(f"DEBUG: Received refresh command")
 
-            embed_or_error = await self.update_highscores(message)
+            # Force refresh the cache
+            embed_or_error = await self.update_highscores(message, force_refresh=True)
 
             if isinstance(embed_or_error, str):
                 print(f"DEBUG: Error returned: {embed_or_error}")
@@ -313,17 +331,17 @@ class HighscoresBot(discord.Client):
                 print("DEBUG: Successfully created embed, updating last message")
                 try:
                     # Create view with buttons
-                    view = HighscoresView(self)
-                    
+                    view = HighscoresView(self, self.cached_embeds)
+
                     # Edit the last message instead of sending a new one
                     await self.last_message.edit(embed=embed_or_error, view=view)
                     await message.add_reaction("✅")  # Add a checkmark reaction to indicate success
                 except Exception as e:
                     print(f"DEBUG: Error updating message: {str(e)}")
                     await message.channel.send("Error updating the message. Sending a new one instead.")
-                    
+
                     # Create view with buttons
-                    view = HighscoresView(self)
+                    view = HighscoresView(self, self.cached_embeds)
                     new_message = await message.channel.send(embed=embed_or_error, view=view)
                     self.last_message = new_message
 
@@ -353,7 +371,7 @@ async def on_ready():
                     await channel.send(f"⚠️ {embed_or_error}")
                 else:
                     # Create view with buttons
-                    view = HighscoresView(client)
+                    view = HighscoresView(client, client.cached_embeds)
                     message = await channel.send(embed=embed_or_error, view=view)
                     client.last_message = message
                 break
