@@ -66,38 +66,20 @@ class HighscoresBot(discord.Client):
             for entry in overall_hiscores:
                 player_name = entry['player']['displayName']
 
-                # Initialize variables
+                # Use the level field directly from the API for total level
                 total_level = 0
                 total_exp = 0
 
-                # Calculate total level by summing individual skill levels - NEVER use the overall 'level' field
-                if 'data' in entry and 'skills' in entry['data']:
-                    skills_data = entry['data']['skills']
-
-                    # The Defence clan specifically doesn't train most combat skills
-                    # So we'll count only the skills that actually have data
-                    skill_levels = []
-                    for skill, data in skills_data.items():
-                        # Only count skills with real data, exclude 'overall'
-                        if skill != 'overall' and 'level' in data and data.get('experience', 0) > 0:
-                            skill_levels.append(data['level'])
-                            total_exp += data.get('experience', 0)
-
-                    # Calculate total level from actual skills data
-                    total_level = sum(skill_levels) if skill_levels else 0
-
-                    # For experience, prioritize using the overall experience directly if available
-                    if 'overall' in skills_data and 'experience' in skills_data['overall']:
-                        total_exp = skills_data['overall']['experience']
-
-                    # Fallback for total exp if needed
-                    if total_exp == 0 and 'player' in entry and 'exp' in entry['player']:
-                        total_exp = entry['player']['exp']
-
-                    # Add debug print to verify our calculations
-                    if 'overall' in skills_data and 'level' in skills_data['overall']:
-                        api_overall = skills_data['overall']['level']
-                        print(f"Player: {player_name}, API reported total level: {api_overall}, Our calculated level: {total_level}")
+                # Get total level and exp from the API
+                if 'data' in entry:
+                    if 'level' in entry['data']:
+                        total_level = entry['data']['level']
+                    if 'experience' in entry['data']:
+                        total_exp = entry['data']['experience']
+                
+                # Fallback if we couldn't find it in the expected location
+                if total_level == 0 and 'player' in entry and 'exp' in entry['player']:
+                    total_exp = entry['player']['exp']
 
                 processed_players.append({
                     'name': player_name,
@@ -111,7 +93,7 @@ class HighscoresBot(discord.Client):
             # Add the top 10 by Total Level
             top_10_text = "Top 10 by Total Level\n"
             for i, player in enumerate(processed_players[:10], 1):
-                # Make sure we're displaying the actual calculated total, never a default value
+                # Format to match what you see in Discord
                 top_10_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
 
             embed.add_field(name="", value=top_10_text, inline=False)
@@ -129,8 +111,13 @@ class HighscoresBot(discord.Client):
                 # Check if the field was added to the embed
                 print(f"Debug - Current embed fields: {len(embed.fields)}")
 
-            # Get hiscores for individual skills
-            skills = ['attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic']
+            # Get hiscores for all individual skills
+            skills = [
+                'attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic',
+                'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting',
+                'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',
+                'farming', 'runecraft', 'hunter', 'construction'
+            ]
 
             for skill in skills:
                 skill_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=skill)
@@ -140,19 +127,16 @@ class HighscoresBot(discord.Client):
                     for i, entry in enumerate(skill_hiscores[:5], 1):
                         player_name = entry['player']['displayName']
 
-                        # For individual skills, look for the level in the correct structure
+                        # For individual skills, get level and experience directly from the data object
                         skill_level = 0
                         exp = 0
 
-                        # Navigate through the correct data structure
+                        # The API returns this in a more straightforward way for individual skills
                         if 'data' in entry:
                             data = entry['data']
-                            if 'skills' in data and skill in data['skills']:
-                                skill_data = data['skills'][skill]
-                                skill_level = skill_data.get('level', 0)
-                                exp = skill_data.get('experience', 0)
-                            elif 'level' in data:  # Direct level data (old structure)
+                            if 'level' in data:
                                 skill_level = data.get('level', 0)
+                            if 'experience' in data:
                                 exp = data.get('experience', 0)
 
                         # Only include players who actually have levels in this skill
