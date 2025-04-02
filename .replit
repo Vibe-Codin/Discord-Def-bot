@@ -28,8 +28,8 @@ task = "shell.exec"
 args = "python main.py"
 # Added automatic restart capability with higher failures allowed
 restart = "always"
-maxRestarts = 10
-restartDelay = 3000  # 3 second delay between restarts
+maxRestarts = 20
+restartDelay = 1500  # 1.5 second delay between restarts
 
 [[workflows.workflow]]
 name = "Run With Debug"  

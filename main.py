@@ -1425,23 +1425,23 @@ async def on_ready():
 
     while retry_count < max_retries:
         try:
-            # Clear any existing commands first
-            client.tree.clear_commands(guild=None)
-
-            # Explicitly ensure all commands are properly registered
-            print("Registering commands...")
-            client.tree.get_command("clanhighscores")
-            client.tree.get_command("refresh")
-            client.tree.get_command("freshembed")
-            client.tree.get_command("new")
-            client.tree.get_command("refreshcache")
-
+            # Don't clear commands first as they're already registered via decorators
+            # client.tree.clear_commands(guild=None)
+            
+            # The commands are already registered by the decorators when the bot starts
+            # We only need to sync them
+            print("Command registration check...")
+            commands = client.tree.get_commands()
+            print(f"Pre-sync commands: {[cmd.name for cmd in commands]}")
+            
             # Sync the commands globally (may take up to an hour to propagate)
             print("Syncing command tree...")
             await client.tree.sync()
 
-            print(f"Commands synced successfully! Commands in tree: {len(client.tree.get_commands())}")
-            print(f"Available commands: {[cmd.name for cmd in client.tree.get_commands()]}")
+            # Verify sync was successful
+            commands_after = client.tree.get_commands()
+            print(f"Commands synced successfully! Commands in tree: {len(commands_after)}")
+            print(f"Available commands: {[cmd.name for cmd in commands_after]}")
             break
         except Exception as e:
             retry_count += 1
@@ -1579,7 +1579,7 @@ async def freshembed(interaction: discord.Interaction):
 
 @client.tree.command(name="new", description="Push a new highscores embed without refreshing cache")
 @app_commands.checks.cooldown(1, 30.0, key=lambda i: i.guild_id)
-async def new_embed(interaction: discord.Interaction):
+async def new(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     try:
@@ -1610,7 +1610,7 @@ async def new_embed(interaction: discord.Interaction):
 
 @client.tree.command(name="refreshcache", description="Refresh highscores cache and push a new embed")
 @app_commands.checks.cooldown(1, 60.0, key=lambda i: i.guild_id)
-async def refresh_cache(interaction: discord.Interaction):
+async def refreshcache(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     try:
@@ -1669,6 +1669,39 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 # Command registration is complete
 print("All commands registered to the tree")
+
+# Add a custom slash command for creating a new embed immediately
+@client.tree.command(name="postembed", description="Immediately post a new highscores embed")
+async def postembed(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True, ephemeral=True)
+    
+    try:
+        await interaction.followup.send("Creating a new highscores embed...", ephemeral=True)
+        
+        # Get embed from cache or create a new one
+        if "total" in client.cached_embeds:
+            embed = client.cached_embeds["total"]
+            embed.timestamp = datetime.now()
+        else:
+            embed = await client.update_highscores(force_refresh=False)
+            
+        if isinstance(embed, str):
+            await interaction.followup.send(f"Error: {embed}", ephemeral=True)
+            return
+            
+        # Create view with buttons
+        view = HighscoresView(client, client.cached_embeds)
+        
+        # Send to channel
+        channel = interaction.channel
+        if channel:
+            message = await channel.send(embed=embed, view=view)
+            client.last_message = message
+            await interaction.followup.send("New highscores embed posted successfully!", ephemeral=True)
+        else:
+            await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"Error posting embed: {str(e)}", ephemeral=True)
 
 # Run the bot
 client.run(TOKEN)
