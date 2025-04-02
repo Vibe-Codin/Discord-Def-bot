@@ -36,8 +36,8 @@ class HighscoresView(View):
 
     async def total_callback(self, interaction):
         try:
-            # Use defer with ephemeral=False to acknowledge the interaction faster
-            await interaction.response.defer(ephemeral=False, thinking=True)
+            # Use defer with ephemeral=True to show loading only to the user who clicked
+            await interaction.response.defer(ephemeral=True, thinking=True)
             
             if "total" in self.cached_embeds:
                 embed = self.cached_embeds["total"]
@@ -46,6 +46,8 @@ class HighscoresView(View):
                 self.cached_embeds["total"] = embed
                 
             await interaction.message.edit(embed=embed, view=self)
+            # Send a follow-up message that's only visible to the user who clicked
+            await interaction.followup.send("Highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for total button")
         except Exception as e:
@@ -53,8 +55,8 @@ class HighscoresView(View):
 
     async def skills_callback(self, interaction):
         try:
-            # Use defer with ephemeral=False to acknowledge the interaction faster
-            await interaction.response.defer(ephemeral=False, thinking=True)
+            # Use defer with ephemeral=True to show loading only to the user who clicked
+            await interaction.response.defer(ephemeral=True, thinking=True)
             
             if "skills" in self.cached_embeds:
                 embed = self.cached_embeds["skills"]
@@ -63,6 +65,8 @@ class HighscoresView(View):
                 self.cached_embeds["skills"] = embed
                 
             await interaction.message.edit(embed=embed, view=self)
+            # Send a follow-up message that's only visible to the user who clicked
+            await interaction.followup.send("Skills highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for skills button")
         except Exception as e:
@@ -70,8 +74,8 @@ class HighscoresView(View):
 
     async def bosses1_callback(self, interaction):
         try:
-            # Use defer with ephemeral=False to acknowledge the interaction faster
-            await interaction.response.defer(ephemeral=False, thinking=True)
+            # Use defer with ephemeral=True to show loading only to the user who clicked
+            await interaction.response.defer(ephemeral=True, thinking=True)
             
             if "bosses1" in self.cached_embeds:
                 embed = self.cached_embeds["bosses1"]
@@ -80,6 +84,8 @@ class HighscoresView(View):
                 self.cached_embeds["bosses1"] = embed
                 
             await interaction.message.edit(embed=embed, view=self)
+            # Send a follow-up message that's only visible to the user who clicked
+            await interaction.followup.send("Bosses 1 highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for bosses1 button")
         except Exception as e:
@@ -87,8 +93,8 @@ class HighscoresView(View):
             
     async def bosses2_callback(self, interaction):
         try:
-            # Use defer with ephemeral=False to acknowledge the interaction faster
-            await interaction.response.defer(ephemeral=False, thinking=True)
+            # Use defer with ephemeral=True to show loading only to the user who clicked
+            await interaction.response.defer(ephemeral=True, thinking=True)
             
             if "bosses2" in self.cached_embeds:
                 embed = self.cached_embeds["bosses2"]
@@ -97,6 +103,8 @@ class HighscoresView(View):
                 self.cached_embeds["bosses2"] = embed
                 
             await interaction.message.edit(embed=embed, view=self)
+            # Send a follow-up message that's only visible to the user who clicked
+            await interaction.followup.send("Bosses 2 highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for bosses2 button")
         except Exception as e:
@@ -104,8 +112,8 @@ class HighscoresView(View):
             
     async def bosses3_callback(self, interaction):
         try:
-            # Use defer with ephemeral=False to acknowledge the interaction faster
-            await interaction.response.defer(ephemeral=False, thinking=True)
+            # Use defer with ephemeral=True to show loading only to the user who clicked
+            await interaction.response.defer(ephemeral=True, thinking=True)
             
             if "bosses3" in self.cached_embeds:
                 embed = self.cached_embeds["bosses3"]
@@ -114,6 +122,8 @@ class HighscoresView(View):
                 self.cached_embeds["bosses3"] = embed
                 
             await interaction.message.edit(embed=embed, view=self)
+            # Send a follow-up message that's only visible to the user who clicked
+            await interaction.followup.send("Bosses 3 highscores updated!", ephemeral=True)
         except discord_errors.NotFound:
             print("Interaction expired for bosses3 button")
         except Exception as e:
