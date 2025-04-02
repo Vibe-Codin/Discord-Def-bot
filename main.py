@@ -111,6 +111,15 @@ class HighscoresBot(discord.Client):
                 # Check if the field was added to the embed
                 print(f"Debug - Current embed fields: {len(embed.fields)}")
 
+            # Improve Total Level display
+            processed_players.sort(key=lambda x: (-x['total_level'], -x['total_exp']))
+            top_10_text = "Top 10 by Total Level\n"
+            for i, player in enumerate(processed_players[:10], 1):
+                # Format with proper spacing
+                top_10_text += f"{i}. {player['name']} | Total: {player['total_level']} | XP: {player['total_exp']:,}\n"
+            
+            embed.fields[0].value = top_10_text
+
             # Get hiscores for all individual skills
             skills = [
                 'attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic',
@@ -118,7 +127,25 @@ class HighscoresBot(discord.Client):
                 'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',
                 'farming', 'runecraft', 'hunter', 'construction'
             ]
+            
+            # Add boss hiscores
+            bosses = [
+                'abyssal_sire', 'alchemical_hydra', 'barrows_chests', 'bryophyta',
+                'callisto', 'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode',
+                'chaos_elemental', 'chaos_fanatic', 'commander_zilyana', 'corporeal_beast',
+                'crazy_archaeologist', 'dagannoth_prime', 'dagannoth_rex', 'dagannoth_supreme',
+                'deranged_archaeologist', 'general_graardor', 'giant_mole', 'grotesque_guardians',
+                'hespori', 'kalphite_queen', 'king_black_dragon', 'kraken',
+                'kreearra', 'kril_tsutsaroth', 'mimic', 'nex',
+                'nightmare', 'phosanis_nightmare', 'obor', 'sarachnis',
+                'scorpia', 'skotizo', 'tempoross', 'the_gauntlet',
+                'the_corrupted_gauntlet', 'theatre_of_blood', 'theatre_of_blood_hard_mode', 'thermonuclear_smoke_devil',
+                'tombs_of_amascut', 'tombs_of_amascut_expert', 'tzkal_zuk', 'tztok_jad',
+                'venenatis', 'vetion', 'vorkath', 'wintertodt',
+                'zalcano', 'zulrah'
+            ]
 
+            # First process all skills
             for skill in skills:
                 skill_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=skill)
                 if skill_hiscores:
@@ -145,6 +172,35 @@ class HighscoresBot(discord.Client):
 
                     if skill_text:  # Only add field if there are players with levels
                         embed.add_field(name=skill.capitalize(), value=skill_text, inline=True)
+
+            # Now process bosses
+            for boss in bosses:
+                try:
+                    boss_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=boss)
+                    if boss_hiscores:
+                        boss_text = ""
+                        # Only get top 5 for each boss
+                        for i, entry in enumerate(boss_hiscores[:5], 1):
+                            player_name = entry['player']['displayName']
+                            
+                            # Get the kill count
+                            kills = 0
+                            if 'data' in entry and 'kills' in entry['data']:
+                                kills = entry['data']['kills']
+                            
+                            # Only include players who have kills for this boss
+                            if kills > 0:
+                                # Format boss name for display (replace underscores with spaces, capitalize)
+                                boss_display_name = ' '.join(word.capitalize() for word in boss.split('_'))
+                                boss_text += f"{i}. {player_name} | KC: {kills:,}\n"
+                        
+                        if boss_text:  # Only add field if there are players with kills
+                            # Format boss name for display
+                            boss_display_name = ' '.join(word.capitalize() for word in boss.split('_'))
+                            embed.add_field(name=boss_display_name, value=boss_text, inline=True)
+                except Exception as e:
+                    print(f"Error processing boss {boss}: {str(e)}")
+                    continue
 
             embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
 
