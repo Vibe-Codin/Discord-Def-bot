@@ -178,12 +178,33 @@ class WOMClient:
     async def get_player_details(self, username):
         try:
             url = f"{self.base_url}/players/{username}"
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)  # Add timeout to prevent hanging
+            
             if response.status_code == 200:
-                return response.json()
+                data = response.json()
+                # Check if data seems valid
+                if isinstance(data, dict) and 'data' in data:
+                    return data
+                else:
+                    print(f"Malformed API response for player {username}")
+                    return None
+            elif response.status_code == 404:
+                print(f"Player {username} not found in WiseOldMan (404)")
+                return None
+            elif response.status_code == 429:
+                print(f"Rate limit exceeded for API request: player {username}")
+                # Sleep a bit to respect rate limits
+                await asyncio.sleep(2)
+                return None
             else:
                 print(f"API error for player {username}: Status code {response.status_code}")
                 return None
+        except requests.exceptions.Timeout:
+            print(f"Timeout fetching player details for {username}")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"Request error fetching player details for {username}: {str(e)}")
+            return None
         except Exception as e:
             print(f"Error fetching player details for {username}: {str(e)}")
             return None
@@ -202,52 +223,81 @@ class HighscoresBot(discord.Client):
 
     async def is_valid_player(self, player_name):
         try:
-            # Get individual player details for combat skill levels
-            player_details = await self.wom_client.get_player_details(player_name)
+            # Set this to True to see very detailed debug information
+            DEBUG = True
             
-            # Debug output for troubleshooting
-            print(f"Validating player: {player_name}")
+            if DEBUG:
+                print(f"Validating player: {player_name}")
             
-            # IMPORTANT CHANGE: If we can't get details for a player or if skills data is missing,
-            # include them by default (being lenient) - this allows players to show up in lists
+            # Try to get player details with a retry mechanism
+            retry_count = 0
+            max_retries = 3
+            player_details = None
+            
+            while retry_count < max_retries and player_details is None:
+                player_details = await self.wom_client.get_player_details(player_name)
+                if player_details is None:
+                    retry_count += 1
+                    if DEBUG:
+                        print(f"Retry {retry_count}/{max_retries} for player {player_name}")
+                    await asyncio.sleep(1)  # Wait before retry
+            
+            # If we still couldn't get player details after retries, exclude them
             if not player_details:
-                print(f"Player {player_name}: Could not fetch details, INCLUDING by default")
-                return True
+                if DEBUG:
+                    print(f"Player {player_name}: Could not fetch details after {max_retries} retries, EXCLUDING")
+                return False
+            
+            # Check if player data and skills exist
+            if 'data' not in player_details:
+                if DEBUG:
+                    print(f"Player {player_name}: No 'data' field in response, EXCLUDING")
+                return False
                 
-            if 'data' not in player_details or 'skills' not in player_details['data']:
-                print(f"Player {player_name}: No skills data available, INCLUDING by default")
-                return True
+            if 'skills' not in player_details['data']:
+                if DEBUG:
+                    print(f"Player {player_name}: No 'skills' field in player data, EXCLUDING")
+                return False
 
             skills = player_details['data']['skills']
+            
+            if DEBUG:
+                print(f"Player {player_name} skills data: {json.dumps(skills, indent=2)}")
 
             # These are the skills we're checking (must be 2 or less)
             restricted_skills = ['attack', 'strength', 'magic', 'ranged']
             
-            # Only exclude players if we can CONFIRM they have more than level 2
-            # in the restricted skills
+            # Check each restricted skill strictly
             for skill_name in restricted_skills:
                 if skill_name not in skills:
-                    # If skill is missing, we can't verify - include by default
-                    print(f"Player {player_name}: {skill_name.capitalize()} data missing, INCLUDING by default")
-                    continue
+                    if DEBUG:
+                        print(f"Player {player_name}: {skill_name.capitalize()} data missing, EXCLUDING")
+                    return False
                 
                 # Get the level for this skill
-                skill_level = skills[skill_name].get('level', 1)  # Default to 1 if can't find
+                if 'level' not in skills[skill_name]:
+                    if DEBUG:
+                        print(f"Player {player_name}: {skill_name.capitalize()} level data missing, EXCLUDING")
+                    return False
+                    
+                skill_level = skills[skill_name]['level']
                 
                 # If level is more than 2, exclude the player
                 if skill_level > 2:
-                    print(f"Player {player_name} EXCLUDED: {skill_name.capitalize()} level {skill_level} > 2")
+                    if DEBUG:
+                        print(f"Player {player_name} EXCLUDED: {skill_name.capitalize()} level {skill_level} > 2")
                     return False
             
             # All checks passed, player meets requirements
-            print(f"Player {player_name} VALIDATED - meets requirements (≤ 2 in Attack/Strength/Magic/Ranged)")
+            if DEBUG:
+                print(f"Player {player_name} VALIDATED - meets requirements (≤ 2 in Attack/Strength/Magic/Ranged)")
             return True
             
         except Exception as e:
             print(f"Error validating player {player_name}: {str(e)}")
-            # If there's an error, include them by default
-            print(f"Player {player_name}: Error during validation, INCLUDING by default")
-            return True
+            # If there's an error, exclude them to be safe
+            print(f"Player {player_name}: Error during validation, EXCLUDING for safety")
+            return False
 
     async def create_total_level_embed(self, group_name):
         # Get overall hiscores for total level ranking
@@ -269,6 +319,7 @@ class HighscoresBot(discord.Client):
         # Process all players to get total levels and experience
         processed_players = []
         valid_player_count = 0
+        excluded_count = 0
         
         print(f"Processing {len(overall_hiscores)} players for total level highscores")
         for entry in overall_hiscores:
@@ -283,8 +334,9 @@ class HighscoresBot(discord.Client):
                 valid_players_cache[player_name] = is_valid  # Cache the result
             
             if not is_valid:
-                print(f"FILTERED OUT: {player_name} - over combat skill limit")
-                continue  # Skip this player if they have more than 2 in any combat skill
+                print(f"FILTERED OUT: {player_name} - over combat skill limit or missing data")
+                excluded_count += 1
+                continue  # Skip this player
                 
             valid_player_count += 1
 
@@ -321,7 +373,8 @@ class HighscoresBot(discord.Client):
             top_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
 
         embed.add_field(name="Top 20 Players by Total Level", value=top_text, inline=False)
-        embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
+        print(f"Filtering stats: {valid_player_count} players included, {excluded_count} excluded")
+        embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')} | {valid_player_count} valid players")
 
         return embed
 
