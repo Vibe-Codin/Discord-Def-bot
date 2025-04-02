@@ -63,11 +63,12 @@ async def fetch_clan_data():
                         print(f"Error response: {error_text}")
                         return None
                     try:
-                        content_type = resp.headers.get('Content-Type', '')
-                        print(f"Response content type: {content_type}")
                         text_data = await resp.text()
-                        print(f"Raw response: {text_data[:200]}...")  # Print first 200 chars
-                        data = await resp.json()
+                        try:
+                            data = await resp.json()
+                        except:
+                            print(f"Failed to parse JSON. Raw response: {text_data[:200]}...")
+                            return None
                         if not data:
                             print("Empty data received from API")
                             return None
@@ -206,6 +207,29 @@ async def update_highscores_task():
 @bot.command()
 async def ping(ctx):
     await ctx.send(f'Pong! Bot latency: {round(bot.latency * 1000)}ms')
+
+@bot.tree.command(name="testapi", description="Test the Wise Old Man API connection")
+async def testapi(interaction: discord.Interaction):
+    await interaction.response.defer()
+    try:
+        url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                text = await resp.text()
+                await interaction.followup.send(f"API Status: {resp.status}\nResponse: {text[:1000]}")
+    except Exception as e:
+        await interaction.followup.send(f"API Error: {str(e)}")
+
+@bot.tree.command(name="testmembers", description="Test fetching clan members")
+async def testmembers(interaction: discord.Interaction):
+    await interaction.response.defer()
+    clan_data = await fetch_clan_data()
+    if clan_data:
+        member_count = len(clan_data)
+        sample = clan_data[:3] if member_count >= 3 else clan_data
+        await interaction.followup.send(f"Found {member_count} members. First 3: {str(sample)[:1000]}")
+    else:
+        await interaction.followup.send("Failed to fetch clan data")
 
 @bot.event
 async def on_ready():
