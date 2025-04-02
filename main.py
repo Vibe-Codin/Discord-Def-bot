@@ -411,7 +411,7 @@ class HighscoresBot(discord.Client):
         # Prepare highscores embed
         embed = discord.Embed(
             title=f"{group_name} Highscores - Total Level",
-            description=f"Top players in {group_name} by total level (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+            description=f"Top 10 players in {group_name} by total level (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
             color=0x3498db,
             timestamp=datetime.now()
         )
@@ -479,42 +479,42 @@ class HighscoresBot(discord.Client):
         # Sort players by total level and then by total exp (both descending)
         processed_players.sort(key=lambda x: (-x['total_level'], -x['total_exp']))
 
-        # Add the top 15 by Total Level
+        # Add the top 10 by Total Level
         top_level_text = ""
         if processed_players:
-            # Make sure we have exactly 15 entries for total level
+            # Make sure we have exactly 10 entries for total level
             level_sorted = sorted(processed_players, key=lambda x: (-x['total_level'], -x['total_exp']))
-            players_to_show = min(15, len(level_sorted))  # In case we have fewer than 15 valid players
+            players_to_show = min(10, len(level_sorted))  # In case we have fewer than 10 valid players
             
             for i, player in enumerate(level_sorted[:players_to_show], 1):
                 top_level_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
             
-            # Add placeholder entries if we have fewer than 15 players
-            if players_to_show < 15:
-                for i in range(players_to_show + 1, 16):
+            # Add placeholder entries if we have fewer than 10 players
+            if players_to_show < 10:
+                for i in range(players_to_show + 1, 11):
                     top_level_text += f"{i}. No player qualifying\n"
         else:
             top_level_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
 
-        # Add the top 15 by Total Experience
+        # Add the top 10 by Total Experience
         top_exp_text = ""
         if processed_players:
-            # Make sure we have exactly 15 entries for total experience
+            # Make sure we have exactly 10 entries for total experience
             exp_sorted = sorted(processed_players, key=lambda x: -x['total_exp'])
-            players_to_show = min(15, len(exp_sorted))  # In case we have fewer than 15 valid players
+            players_to_show = min(10, len(exp_sorted))  # In case we have fewer than 10 valid players
             
             for i, player in enumerate(exp_sorted[:players_to_show], 1):
                 top_exp_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
                 
-            # Add placeholder entries if we have fewer than 15 players
-            if players_to_show < 15:
-                for i in range(players_to_show + 1, 16):
+            # Add placeholder entries if we have fewer than 10 players
+            if players_to_show < 10:
+                for i in range(players_to_show + 1, 11):
                     top_exp_text += f"{i}. No player qualifying\n"
         else:
             top_exp_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
 
-        embed.add_field(name="Top 15 Players by Total Level", value=top_level_text, inline=False)
-        embed.add_field(name="Top 15 Players by Total Experience", value=top_exp_text, inline=False)
+        embed.add_field(name="Top 10 Players by Total Level", value=top_level_text, inline=False)
+        embed.add_field(name="Top 10 Players by Total Experience", value=top_exp_text, inline=False)
         print(f"Filtering stats: {valid_player_count} players included, {excluded_count} excluded")
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')} | {valid_player_count} valid players")
 
