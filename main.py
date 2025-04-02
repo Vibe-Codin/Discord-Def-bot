@@ -42,70 +42,47 @@ async def fetch_clan_data():
             'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
         }
 
-        # Try different API endpoints based on documentation
-        # First, get the group details to verify we can access the correct clan
-        # v2 API format for group endpoints - correct format per WOM docs
+        # According to the Wise Old Man API docs, use v2 endpoint
         group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
-        group_by_name_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence"
+        group_members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
         print(f"Fetching group details from: {group_endpoint}")
-        print(f"Also trying name endpoint: {group_by_name_endpoint}")
-        # Competition endpoint which seems to work
-        competitions_endpoint = f"{WISE_OLD_MAN_BASE_URL}/competitions"
-        print(f"Also trying competitions endpoint: {competitions_endpoint}")
+        print(f"Members endpoint: {group_members_endpoint}")
 
         import requests
         try:
-            # First try to use requests library directly to reduce any potential issues
+            # First fetch group details to verify we have a valid group
             response = requests.get(group_endpoint, headers=headers, timeout=15)
             print(f"Group details response status: {response.status_code}")
             
-            # If first attempt fails, try with name format
-            if response.status_code != 200 or not response.text.strip():
-                print("First attempt failed, trying by name")
-                response = requests.get(group_by_name_endpoint, headers=headers, timeout=15)
-                print(f"Group by name response status: {response.status_code}")
-
-            if response.status_code == 200:
-                # Check if there's actual content before trying to parse JSON
-                if response.text and response.text.strip():
-                    try:
-                        group_data = response.json()
-                        print(f"Group data: {json.dumps(group_data, indent=2)[:200]}...")
-
-                        # If we got valid group data, now fetch members
-                        if 'id' in group_data:
-                            group_id = group_data['id']
-                            print(f"Found group ID: {group_id}")
-
-                            # Use the found group ID to fetch members
-                            members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{group_id}/members"
-                            print(f"Fetching members from: {members_endpoint}")
-
-                            members_response = requests.get(members_endpoint, headers=headers, timeout=15)
-                            if members_response.status_code == 200 and members_response.text.strip():
-                                members_data = members_response.json()
-                                print(f"Found {len(members_data)} members")
-                                return members_data
-                    except json.JSONDecodeError as e:
-                        print(f"Error decoding group JSON: {e}")
-                else:
-                    print(f"Received empty response from {group_endpoint}")
+            if response.status_code == 200 and response.text.strip():
+                try:
+                    group_data = response.json()
+                    print(f"Group data: {json.dumps(group_data, indent=2)[:200]}...")
                     
-                    # Try directly with the clan ID as fallback
-                    print("Trying direct clan ID approach as fallback")
-                    members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
-                    members_response = requests.get(members_endpoint, headers=headers, timeout=15)
+                    # Now fetch the members directly - this is what we need
+                    members_response = requests.get(group_members_endpoint, headers=headers, timeout=15)
                     
                     if members_response.status_code == 200 and members_response.text.strip():
                         try:
                             members_data = members_response.json()
-                            print(f"Found {len(members_data)} members directly with ID")
-                            return members_data
+                            # Extract player details from each membership
+                            player_data = []
+                            for membership in members_data:
+                                if 'player' in membership and isinstance(membership['player'], dict):
+                                    player_data.append(membership['player'])
+                            
+                            print(f"Found {len(player_data)} player records from memberships")
+                            return player_data
                         except json.JSONDecodeError as e:
                             print(f"Error decoding members JSON: {e}")
                     else:
-                        print(f"Direct ID approach also failed: {members_response.status_code}")
+                        print(f"Failed to get members: {members_response.status_code}")
                         print(f"Response text: {members_response.text[:100] if members_response.text else 'Empty'}")
+                except json.JSONDecodeError as e:
+                    print(f"Error decoding group JSON: {e}")
+            else:
+                print(f"Failed to get group details: {response.status_code}")
+                print(f"Response text: {response.text[:100] if response.text else 'Empty'}")
         except Exception as e:
             print(f"Error with direct request: {e}")
 
@@ -191,12 +168,23 @@ def build_messages(clan_data):
         if not isinstance(player, dict):
             print(f"Invalid player data format: {player}")
             continue
+            
+        # Try to access player's latest snapshot data
+        # In the API, player stats are in the 'latestSnapshot' field
+        skills_data = {}
+        if 'latestSnapshot' in player and player['latestSnapshot'] and 'data' in player['latestSnapshot']:
+            if 'skills' in player['latestSnapshot']['data']:
+                skills_data = player['latestSnapshot']['data']['skills']
+        
         valid = True
         for skill in offensive_skills:
-            level = player.get("skills", {}).get(skill, {}).get("level", 0)
-            if level > 2:
-                valid = False
-                break
+            # Check if the skill data exists and get the level
+            if skill in skills_data:
+                level = skills_data[skill].get('level', 0)
+                if level > 2:
+                    valid = False
+                    break
+        
         if valid:
             filtered.append(player)
 
@@ -390,56 +378,65 @@ async def testapi(interaction: discord.Interaction):
 async def testgroup(interaction: discord.Interaction):
     await interaction.response.defer()
     try:
-        # Try to get the group details by name
+        # Try to get the group details by ID
         headers = {
             'Accept': 'application/json',
             'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
         }
 
-        # Try group endpoints from documentation
-        group_urls = [
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",
-            f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence",
-            f"{WISE_OLD_MAN_BASE_URL}/competitions?groupId={CLAN_ID}"
-        ]
+        # Use the correct API endpoints from the documentation
+        group_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+        members_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
+        hiscores_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores?metric=overall"
 
         results = []
 
         # Use requests for maximum compatibility
         import requests
-        for url in group_urls:
-            try:
-                response = requests.get(url, headers=headers, timeout=15)
-                status_code = response.status_code
-                results.append(f"URL: {url}\nStatus: {status_code}")
+        
+        # 1. Get group details
+        try:
+            response = requests.get(group_url, headers=headers, timeout=15)
+            status_code = response.status_code
+            results.append(f"Group URL: {group_url}\nStatus: {status_code}")
 
-                if response.text and response.text.strip():
-                    try:
-                        json_data = response.json()
-                        formatted_json = json.dumps(json_data, indent=2)
-                        results.append(f"Response: {formatted_json}\n\n")
+            if response.text and response.text.strip():
+                try:
+                    group_data = response.json()
+                    # Limit to first 500 chars to avoid discord message limit
+                    formatted_json = json.dumps(group_data, indent=2)[:500] + "..."
+                    results.append(f"Group data: {formatted_json}\n")
 
-                        if 'id' in json_data:
-                            group_id = json_data['id']
-                            results.append(f"Found group ID: {group_id}")
-
-                            # Try to get members for this group
-                            members_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{group_id}/members"
-                            members_response = requests.get(members_url, headers=headers, timeout=15)
-
-                            if members_response.status_code == 200:
-                                members_data = members_response.json()
-                                member_count = len(members_data)
-                                results.append(f"Found {member_count} members")
-                                if member_count > 0:
-                                    # Show first member as example
-                                    results.append(f"First member: {json.dumps(members_data[0], indent=2)}")
-                    except json.JSONDecodeError:
-                        results.append(f"Response: {response.text[:200]} (Not valid JSON)\n\n")
-                else:
-                    results.append(f"Response: Empty content\n\n")
-            except Exception as e:
-                results.append(f"Error with {url}: {str(e)}\n\n")
+                    # 2. Get group members
+                    members_response = requests.get(members_url, headers=headers, timeout=15)
+                    if members_response.status_code == 200:
+                        members_data = members_response.json()
+                        member_count = len(members_data)
+                        results.append(f"Found {member_count} members")
+                        
+                        if member_count > 0:
+                            # Show first member as example (limit to 500 chars)
+                            member_json = json.dumps(members_data[0], indent=2)[:500] + "..."
+                            results.append(f"First member: {member_json}\n")
+                            
+                            # 3. Get group hiscores
+                            hiscores_response = requests.get(hiscores_url, headers=headers, timeout=15)
+                            if hiscores_response.status_code == 200:
+                                hiscores_data = hiscores_response.json()
+                                results.append(f"Found {len(hiscores_data)} hiscores entries")
+                                
+                                if len(hiscores_data) > 0:
+                                    # Show first hiscore entry (limit to 500 chars)
+                                    hiscore_json = json.dumps(hiscores_data[0], indent=2)[:500] + "..."
+                                    results.append(f"First hiscore entry: {hiscore_json}")
+                    else:
+                        results.append(f"Failed to get members: Status {members_response.status_code}")
+                except json.JSONDecodeError:
+                    results.append(f"Response: {response.text[:200]} (Not valid JSON)\n")
+            else:
+                results.append(f"Response: Empty content\n")
+        except Exception as e:
+            results.append(f"Error with {group_url}: {str(e)}\n")
 
         # Send results
         debug_info = "Group Test Results:\n\n" + "\n".join(results)
@@ -456,13 +453,66 @@ async def testgroup(interaction: discord.Interaction):
 @bot.tree.command(name="testmembers", description="Test fetching clan members")
 async def testmembers(interaction: discord.Interaction):
     await interaction.response.defer()
-    clan_data = await fetch_clan_data()
-    if clan_data:
-        member_count = len(clan_data)
-        sample = clan_data[:3] if member_count >= 3 else clan_data
-        await interaction.followup.send(f"Found {member_count} members. First 3: {str(sample)[:1000]}")
-    else:
-        await interaction.followup.send("Failed to fetch clan data")
+    
+    # Use headers according to API documentation
+    headers = {
+        'Accept': 'application/json',
+        'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
+    }
+    
+    # Direct call to members endpoint
+    import requests
+    members_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
+    
+    try:
+        response = requests.get(members_url, headers=headers, timeout=15)
+        if response.status_code == 200 and response.text.strip():
+            try:
+                members_data = response.json()
+                member_count = len(members_data)
+                
+                # Get the structure of the first member to understand it
+                if member_count > 0:
+                    first_member = members_data[0]
+                    keys = list(first_member.keys())
+                    
+                    # Get player data structure if available
+                    player_keys = []
+                    if 'player' in first_member and isinstance(first_member['player'], dict):
+                        player_keys = list(first_member['player'].keys())
+                    
+                    # Check for snapshot data if it exists
+                    snapshot_info = "No snapshot data found"
+                    if ('player' in first_member and 
+                        'latestSnapshot' in first_member['player'] and 
+                        first_member['player']['latestSnapshot']):
+                        snapshot = first_member['player']['latestSnapshot']
+                        snapshot_info = f"Snapshot found with keys: {list(snapshot.keys())}"
+                        
+                        # Check for skills data
+                        if 'data' in snapshot and 'skills' in snapshot['data']:
+                            skill_keys = list(snapshot['data']['skills'].keys())
+                            snapshot_info += f"\nSkills available: {skill_keys[:10]}..."
+                    
+                    # Format the first member as a string with limited length
+                    sample_json = json.dumps(first_member, indent=2)[:900]
+                    
+                    message = f"Found {member_count} members.\n\n"
+                    message += f"Member structure keys: {keys}\n\n"
+                    message += f"Player structure keys: {player_keys}\n\n"
+                    message += f"Snapshot info: {snapshot_info}\n\n"
+                    message += f"Sample member data:\n{sample_json}"
+                    
+                    # Send the detailed info
+                    await interaction.followup.send(message)
+                else:
+                    await interaction.followup.send(f"Found {member_count} members but no data is available.")
+            except json.JSONDecodeError as e:
+                await interaction.followup.send(f"Error parsing member data: {str(e)}")
+        else:
+            await interaction.followup.send(f"Failed to fetch members: Status {response.status_code}")
+    except Exception as e:
+        await interaction.followup.send(f"Error fetching members: {str(e)}")
 
 @bot.event
 async def on_ready():
