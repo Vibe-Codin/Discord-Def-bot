@@ -70,7 +70,7 @@ async def fetch_clan_data():
                 # Fetch player details for each member with rate limit handling
                 player_data = []
                 rate_limited_count = 0
-                
+
                 # Instead of fetching all players individually, try to fetch top players for each metric
                 # This is more efficient than fetching each player separately
                 try:
@@ -79,12 +79,12 @@ async def fetch_clan_data():
                     async with session.get(hiscores_url, headers=headers) as hiscores_response:
                         if hiscores_response.status == 200:
                             hiscores_data = await hiscores_response.json()
-                            
+
                             # Extract player data from hiscores
                             for entry in hiscores_data:
                                 if 'player' in entry:
                                     player_data.append(entry['player'])
-                                    
+
                             if len(player_data) > 0:
                                 print(f"Successfully fetched hiscores data for {len(player_data)} players")
                                 return player_data
@@ -92,17 +92,17 @@ async def fetch_clan_data():
                             print(f"Failed to fetch hiscores data: {hiscores_response.status}")
                 except Exception as hiscores_error:
                     print(f"Error fetching hiscores: {hiscores_error}")
-                
+
                 # Fallback to individual player fetching if the above method fails
                 # Use a delay between requests to avoid rate limiting
                 import asyncio
-                
+
                 # Only fetch the first 50 players to avoid rate limits
                 limited_members = member_usernames[:50]
                 for username in limited_members:
                     # Add delay between requests to avoid rate limiting
                     await asyncio.sleep(0.5)
-                    
+
                     player_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
                     try:
                         async with session.get(player_url, headers=headers) as player_response:
@@ -125,7 +125,7 @@ async def fetch_clan_data():
                     print(f"Sample player data: {json.dumps(player_data[0], indent=2)[:200]}...")
                     return player_data
                 return None
-                
+
     except Exception as e:
         print(f"Error fetching clan data: {e}")
 
@@ -135,20 +135,20 @@ async def fetch_clan_data():
             # Try to get hiscores directly first
             hiscores_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores?metric=overall&limit=100"
             hiscores_response = requests.get(hiscores_url, headers=headers, timeout=15)
-            
+
             if hiscores_response.status_code == 200:
                 hiscores_data = hiscores_response.json()
                 player_data = []
-                
+
                 # Extract player data from hiscores
                 for entry in hiscores_data:
                     if 'player' in entry:
                         player_data.append(entry['player'])
-                        
+
                 if len(player_data) > 0:
                     print(f"Fallback: Successfully fetched hiscores data for {len(player_data)} players")
                     return player_data
-            
+
             # If direct hiscores didn't work, try the group members approach
             group_details_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
             group_response = requests.get(group_details_url, headers=headers, timeout=15)
@@ -171,13 +171,13 @@ async def fetch_clan_data():
             # Fetch a limited number of player details to avoid rate limits
             player_data = []
             import time
-            
+
             # Only fetch the first 30 players to avoid rate limits
             limited_members = member_usernames[:30]
             for username in limited_members:
                 # Add delay between requests
                 time.sleep(0.5)
-                
+
                 player_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
                 player_response = requests.get(player_url, headers=headers, timeout=15)
                 if player_response.status_code == 200:
@@ -208,6 +208,16 @@ def format_total_level_message(clan_data: List[Dict]) -> str:
             level = overall.get('level', 0)
             exp = overall.get('experience', 0)
             return (level, exp)
+        # Also try direct access to stats for hiscores entries
+        elif 'stats' in player:
+            stats = player.get('stats', {})
+            if 'overall' in stats:
+                overall = stats.get('overall', {})
+                level = overall.get('level', 0)
+                exp = overall.get('experience', 0)
+                return (level, exp)
+        # Debug what kind of data structure we're receiving
+        print(f"Player data structure example: {str(player)[:300]}...")
         return (0, 0)
 
     sorted_players = sorted(
@@ -344,14 +354,14 @@ class RefreshButton(discord.ui.View):
         try:
             # First give immediate feedback
             await interaction.followup.send("Refreshing highscores... this may take a moment.", ephemeral=True)
-            
+
             clan_data = await fetch_clan_data()
             if not clan_data:
                 await interaction.followup.send("Error fetching clan data. Please try again later.", ephemeral=True)
                 return
 
             embed = create_highscores_embed(clan_data)
-            
+
             # Update the message with new data
             message = highscore_messages.get("main")
             if message:
@@ -383,7 +393,7 @@ def create_highscores_embed(clan_data):
         description="Top players in OSRS Defence clan",
         color=discord.Color.blue()
     )
-    
+
     # Add top 10 by total level
     def get_total_level_and_exp(player: Dict) -> Tuple[int, int]:
         if 'latestSnapshot' in player and player['latestSnapshot']:
@@ -393,6 +403,16 @@ def create_highscores_embed(clan_data):
             level = overall.get('level', 0)
             exp = overall.get('experience', 0)
             return (level, exp)
+        # Also try direct access to stats for hiscores entries
+        elif 'stats' in player:
+            stats = player.get('stats', {})
+            if 'overall' in stats:
+                overall = stats.get('overall', {})
+                level = overall.get('level', 0)
+                exp = overall.get('experience', 0)
+                return (level, exp)
+        # Debug what kind of data structure we're receiving
+        print(f"Player data structure example: {str(player)[:300]}...")
         return (0, 0)
 
     sorted_players = sorted(
@@ -400,9 +420,9 @@ def create_highscores_embed(clan_data):
         key=get_total_level_and_exp,
         reverse=True
     )
-    
+
     top_players = sorted_players[:10]
-    
+
     # Add top 10 by total level field
     top_level_text = ""
     for index, player in enumerate(top_players, 1):
@@ -410,13 +430,13 @@ def create_highscores_embed(clan_data):
         display_name = player.get('displayName', username)
         level, exp = get_total_level_and_exp(player)
         top_level_text += f"**{index}.** {display_name} | Lvl: {level} | XP: {exp:,}\n"
-    
+
     embed.add_field(name="Top 10 by Total Level", value=top_level_text or "No data available", inline=False)
-    
+
     # Add timestamp and footer
     embed.timestamp = discord.utils.utcnow()
     embed.set_footer(text="Last updated")
-    
+
     return embed
 
 @bot.tree.command(name="clanhighscores", description="Show clan highscores")
@@ -430,14 +450,14 @@ async def clanhighscores(interaction: discord.Interaction):
 
         # Create an embed with the data
         embed = create_highscores_embed(clan_data)
-        
+
         # Create the view with refresh button
         view = RefreshButton(bot)
-        
+
         # Send the embed with the button
         message = await interaction.followup.send(embed=embed, view=view)
         highscore_messages["main"] = message
-        
+
     except Exception as e:
         print(f"Error in clanhighscores command: {e}")
         await interaction.followup.send(f"An error occurred while updating highscores: {str(e)}")
@@ -457,7 +477,7 @@ async def update_highscores_task():
 
         # Create embed with current data
         embed = create_highscores_embed(clan_data)
-        
+
         # Create the view with refresh button
         view = RefreshButton(bot)
 
