@@ -1161,7 +1161,7 @@ async def preload_categories(bot):
 # Run the bot
 client.run(TOKEN)
 async def create_bosses_overview_embed(self):
-    """Create an overview embed showing top boss kills for various bosses"""
+    """Create an overview embed showing top 10 highest KC players across all bosses"""
     try:
         # Get group name
         group_name = "OSRS Defence"  # Default name
@@ -1171,74 +1171,116 @@ async def create_bosses_overview_embed(self):
         
         # Create the overview embed
         embed = discord.Embed(
-            title=f"{group_name} Highscores - Boss Overview",
-            description=f"Top boss killers in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+            title=f"{group_name} Highscores - Top Boss KCs",
+            description=f"Top 10 highest boss KCs in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
             color=0x3498db,
             timestamp=datetime.now()
         )
         
-        # List of important bosses to include in the overview
-        important_bosses = [
-            "vorkath", "zulrah", "chambers_of_xeric", "theatre_of_blood", 
-            "tombs_of_amascut", "nex", "nightmare", "the_corrupted_gauntlet",
-            "alchemical_hydra", "abyssal_sire"
+        # All bosses to check
+        all_bosses = [
+            'abyssal_sire', 'alchemical_hydra', 'amoxliatl', 'araxxor', 'artio', 
+            'barrows_chests', 'bryophyta', 'callisto', 'calvarion', 'cerberus', 
+            'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 'chaos_elemental', 
+            'chaos_fanatic', 'commander_zilyana', 'corporeal_beast', 'crazy_archaeologist', 
+            'dagannoth_prime', 'dagannoth_rex', 'dagannoth_supreme', 'deranged_archaeologist', 
+            'duke_sucellus', 'general_graardor', 'giant_mole', 'grotesque_guardians', 
+            'hespori', 'kalphite_queen', 'king_black_dragon', 'kraken', 'kreearra', 
+            'kril_tsutsaroth', 'lunar_chests', 'mimic', 'nex', 'nightmare', 
+            'phosanis_nightmare', 'obor', 'phantom_muspah', 'sarachnis', 'scorpia', 
+            'scurrius', 'skotizo', 'sol_heredit', 'spindel', 'tempoross', 
+            'the_gauntlet', 'the_corrupted_gauntlet', 'the_hueycoatl', 'the_leviathan', 
+            'the_royal_titans', 'the_whisperer', 'theatre_of_blood', 'theatre_of_blood_hard_mode', 
+            'thermonuclear_smoke_devil', 'tombs_of_amascut', 'tombs_of_amascut_expert', 
+            'tzkal_zuk', 'tztok_jad', 'vardorvis', 'venenatis', 'vetion', 
+            'vorkath', 'wintertodt', 'zalcano', 'zulrah'
         ]
         
-        # Process each boss to find the player with the most kills
-        for boss_name in important_bosses:
-            try:
-                # Format boss name for display
-                display_name = ' '.join(word.capitalize() for word in boss_name.split('_'))
-                
-                # Get the highscores for this boss
-                boss_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=boss_name)
-                if not boss_hiscores:
-                    continue
-                
-                # Find valid players with the most kills
-                top_players = []
-                max_to_check = min(10, len(boss_hiscores))
-                
-                # Create validation tasks
-                validation_tasks = []
-                for entry in boss_hiscores[:max_to_check]:
-                    player_name = entry['player']['displayName']
-                    validation_tasks.append((entry, self.is_valid_player(player_name)))
-                
-                # Process results
-                for entry, validation_task in validation_tasks:
-                    is_valid = await validation_task
-                    if is_valid:
-                        player_name = entry['player']['displayName']
+        # Store all player KCs across all bosses
+        all_kcs = []
+        
+        # Process a batch of bosses at a time to avoid rate limiting
+        batch_size = 5
+        boss_batches = [all_bosses[i:i+batch_size] for i in range(0, len(all_bosses), batch_size)]
+        
+        for boss_batch in boss_batches:
+            boss_tasks = []
+            for boss_name in boss_batch:
+                # Create a task for each boss in the batch
+                async def process_boss(boss):
+                    try:
+                        # Format boss name for display
+                        display_name = ' '.join(word.capitalize() for word in boss.split('_'))
                         
-                        if 'data' in entry and 'kills' in entry['data']:
-                            kills = entry['data']['kills']
-                            
-                            # Only include if they have kills for this boss
-                            if kills > 0:
-                                top_players.append({
-                                    'name': player_name,
-                                    'kills': kills
-                                })
+                        # Get the highscores for this boss
+                        boss_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=boss)
+                        if not boss_hiscores:
+                            return []
+                        
+                        # Find valid players with kills
+                        boss_kcs = []
+                        max_to_check = min(5, len(boss_hiscores))  # Check top 5 for each boss
+                        
+                        # Create validation tasks
+                        validation_tasks = []
+                        for entry in boss_hiscores[:max_to_check]:
+                            player_name = entry['player']['displayName']
+                            validation_tasks.append((entry, self.is_valid_player(player_name)))
+                        
+                        # Process results
+                        for entry, validation_task in validation_tasks:
+                            is_valid = await validation_task
+                            if is_valid:
+                                player_name = entry['player']['displayName']
+                                
+                                if 'data' in entry and 'kills' in entry['data']:
+                                    kills = entry['data']['kills']
+                                    
+                                    # Only include if they have kills for this boss
+                                    if kills > 0:
+                                        boss_kcs.append({
+                                            'name': player_name,
+                                            'boss': display_name,
+                                            'kills': kills
+                                        })
+                        
+                        return boss_kcs
+                    except Exception as e:
+                        print(f"Error processing boss {boss}: {str(e)}")
+                        return []
                 
-                # If we found any valid players, add the top one to the embed
-                if top_players:
-                    # Sort by kills
-                    top_players.sort(key=lambda x: -x['kills'])
-                    
-                    # Take the top 3 if available
-                    top_3_text = ""
-                    for i, player in enumerate(top_players[:3], 1):
-                        top_3_text += f"{i}. {player['name']} - {player['kills']:,} KC\n"
-                    
-                    # Add to embed
-                    embed.add_field(
-                        name=display_name,
-                        value=top_3_text if top_3_text else "No valid players found",
-                        inline=True
-                    )
-            except Exception as e:
-                print(f"Error processing boss {boss_name} for overview: {str(e)}")
+                boss_tasks.append(process_boss(boss_name))
+            
+            # Run all boss tasks in this batch concurrently
+            batch_results = await asyncio.gather(*boss_tasks)
+            
+            # Combine all results
+            for result in batch_results:
+                all_kcs.extend(result)
+            
+            # Small delay between batches to avoid API rate limits
+            await asyncio.sleep(0.5)
+        
+        # Find the top 10 KCs across all bosses
+        all_kcs.sort(key=lambda x: -x['kills'])
+        top_10_kcs = all_kcs[:10]
+        
+        if top_10_kcs:
+            top_kcs_text = ""
+            for i, entry in enumerate(top_10_kcs, 1):
+                top_kcs_text += f"{i}. {entry['name']} - {entry['kills']:,} {entry['boss']} KC\n"
+            
+            embed.add_field(
+                name="Top 10 Highest Boss KCs",
+                value=top_kcs_text,
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="Top 10 Highest Boss KCs",
+                value="No valid players found with boss kills",
+                inline=False
+            )
         
         # Add footer
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
