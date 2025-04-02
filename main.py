@@ -65,9 +65,10 @@ class HighscoresBot(discord.Client):
             top_10_text = "Top 10 by Total Level\n"
             for i, entry in enumerate(overall_hiscores[:10], 1):
                 player_name = entry['player']['displayName']
-                level = entry['data'].get('level', 0)
+                # For overall, the level is the total level which can vary
+                total_level = entry['data'].get('level', 0)
                 exp = entry['data'].get('experience', 0)
-                top_10_text += f"{i}. {player_name} | Lvl: {level} | XP: {exp:,}\n"
+                top_10_text += f"{i}. {player_name} | Total: {total_level} | XP: {exp:,}\n"
             
             embed.add_field(name="", value=top_10_text, inline=False)
             
@@ -83,8 +84,10 @@ class HighscoresBot(discord.Client):
                         player_name = entry['player']['displayName']
                         # Only include players who actually have levels in this skill
                         if entry['data'].get('experience', 0) > 0:
-                            level = entry['data'].get('level', 0)
-                            skill_text += f"{i}. {player_name} ({level})\n"
+                            # For individual skills, the level is typically 1-99
+                            skill_level = entry['data'].get('level', 0)
+                            exp = entry['data'].get('experience', 0)
+                            skill_text += f"{i}. {player_name} (Lvl: {skill_level}) XP: {exp:,}\n"
                     
                     if skill_text:  # Only add field if there are players with levels
                         embed.add_field(name=skill.capitalize(), value=skill_text, inline=True)
