@@ -173,22 +173,24 @@ async def update_highscores_task():
         if channel is None:
             print("Channel not found.")
             return
-    clan_data = await fetch_clan_data()
-    if clan_data is None:
-        print("Error fetching clan data in background task.")
-        return
-    msg1, msg2, msg3 = build_messages(clan_data)
-    if highscore_messages["msg1"] is None:
-        highscore_messages["msg1"] = await channel.send(msg1)
-        highscore_messages["msg2"] = await channel.send(msg2)
-        highscore_messages["msg3"] = await channel.send(msg3)
-    else:
-        try:
-            await highscore_messages["msg1"].edit(content=msg1)
-            await highscore_messages["msg2"].edit(content=msg2)
-            await highscore_messages["msg3"].edit(content=msg3)
-        except Exception as e:
-            print("Error editing messages: ", e)
+            
+        clan_data = await fetch_clan_data()
+        if clan_data is None:
+            print("Error fetching clan data in background task.")
+            return
+            
+        msg1, msg2, msg3 = build_messages(clan_data)
+        if highscore_messages["msg1"] is None:
+            highscore_messages["msg1"] = await channel.send(msg1)
+            highscore_messages["msg2"] = await channel.send(msg2)
+            highscore_messages["msg3"] = await channel.send(msg3)
+        else:
+            try:
+                await highscore_messages["msg1"].edit(content=msg1)
+                await highscore_messages["msg2"].edit(content=msg2)
+                await highscore_messages["msg3"].edit(content=msg3)
+            except Exception as e:
+                print("Error editing messages: ", e)
     except Exception as e:
         print(f"Error in update task: {e}")
 
