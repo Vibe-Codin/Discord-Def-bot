@@ -942,7 +942,249 @@ class HighscoresBot(discord.Client):
             )
             return error_embed
     
-    async def update_highscores(self, message=None, view_type="total", force_refresh=False):
+    async def create_bosses_overview_embed(self):
+    """Create an overview embed showing top 10 highest KC players across all bosses"""
+    try:
+        # Get group name
+        group_name = "OSRS Defence"  # Default name
+        group_info = await self.wom_client.get_group_details(self.GROUP_ID)
+        if group_info and 'name' in group_info:
+            group_name = group_info['name']
+        
+        # Create the overview embed
+        embed = discord.Embed(
+            title=f"{group_name} Highscores - Top Boss KCs",
+            description=f"Top 10 highest boss KCs in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+            color=0x3498db,
+            timestamp=datetime.now()
+        )
+        
+        # All bosses to check
+        all_bosses = [
+            'amoxliatl', 'araxxor', 'barrows_chests', 'bryophyta', 'callisto', 
+            'calvarion', 'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode', 
+            'chaos_elemental', 'chaos_fanatic', 'commander_zilyana', 'corporeal_beast', 
+            'crazy_archaeologist', 'deranged_archaeologist', 'giant_mole', 'hespori', 
+            'kalphite_queen', 'king_black_dragon', 'kril_tsutsaroth', 'lunar_chests', 
+            'obor', 'sarachnis', 'scorpia', 'scurrius', 'skotizo', 'spindel', 
+            'tempoross', 'the_hueycoatl', 'the_royal_titans', 'thermonuclear_smoke_devil', 
+            'tztok_jad', 'venenatis', 'vetion', 'wintertodt'
+        ]
+        
+        # Store all player KCs across all bosses
+        all_kcs = []
+        
+        # Process a batch of bosses at a time to avoid rate limiting
+        batch_size = 5
+        boss_batches = [all_bosses[i:i+batch_size] for i in range(0, len(all_bosses), batch_size)]
+        
+        for boss_batch in boss_batches:
+            boss_tasks = []
+            for boss_name in boss_batch:
+                # Create a task for each boss in the batch
+                async def process_boss(boss):
+                    try:
+                        # Format boss name for display
+                        display_name = ' '.join(word.capitalize() for word in boss.split('_'))
+                        
+                        # Get the highscores for this boss
+                        boss_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=boss)
+                        if not boss_hiscores:
+                            return []
+                        
+                        # Find valid players with kills
+                        boss_kcs = []
+                        max_to_check = min(5, len(boss_hiscores))  # Check top 5 for each boss
+                        
+                        # Create validation tasks
+                        validation_tasks = []
+                        for entry in boss_hiscores[:max_to_check]:
+                            player_name = entry['player']['displayName']
+                            validation_tasks.append((entry, self.is_valid_player(player_name)))
+                        
+                        # Process results
+                        for entry, validation_task in validation_tasks:
+                            is_valid = await validation_task
+                            if is_valid:
+                                player_name = entry['player']['displayName']
+                                
+                                if 'data' in entry and 'kills' in entry['data']:
+                                    kills = entry['data']['kills']
+                                    
+                                    # Only include if they have kills for this boss
+                                    if kills > 0:
+                                        boss_kcs.append({
+                                            'name': player_name,
+                                            'boss': display_name,
+                                            'kills': kills
+                                        })
+                        
+                        return boss_kcs
+                    except Exception as e:
+                        print(f"Error processing boss {boss}: {str(e)}")
+                        return []
+                
+                boss_tasks.append(process_boss(boss_name))
+            
+            # Run all boss tasks in this batch concurrently
+            batch_results = await asyncio.gather(*boss_tasks)
+            
+            # Combine all results
+            for result in batch_results:
+                all_kcs.extend(result)
+            
+            # Small delay between batches to avoid API rate limits
+            await asyncio.sleep(0.5)
+        
+        # Find the top 10 KCs across all bosses
+        all_kcs.sort(key=lambda x: -x['kills'])
+        top_10_kcs = all_kcs[:10]
+        
+        if top_10_kcs:
+            top_kcs_text = ""
+            for i, entry in enumerate(top_10_kcs, 1):
+                top_kcs_text += f"{i}. {entry['name']} - {entry['kills']:,} {entry['boss']} KC\n"
+            
+            embed.add_field(
+                name="Top 10 Highest Boss KCs",
+                value=top_kcs_text,
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="Top 10 Highest Boss KCs",
+                value="No valid players found with boss kills",
+                inline=False
+            )
+        
+        # Add footer
+        embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
+        
+        return embed
+    except Exception as e:
+        print(f"Error creating boss overview embed: {str(e)}")
+        # Create an error embed
+        error_embed = discord.Embed(
+            title="Error",
+            description=f"An error occurred while creating the boss overview: {str(e)}",
+            color=0xFF0000
+        )
+        return error_embed
+
+async def create_dagannoth_kings_embed(self):
+    """Create an embed showing combined Dagannoth Kings information"""
+    try:
+        # Get group name
+        group_name = "OSRS Defence"  # Default name
+        group_info = await self.wom_client.get_group_details(self.GROUP_ID)
+        if group_info and 'name' in group_info:
+            group_name = group_info['name']
+        
+        # Create the embed
+        embed = discord.Embed(
+            title=f"{group_name} Highscores - Dagannoth Kings",
+            description=f"Top Dagannoth Kings killers in {group_name} (≤ 2 in Attack/Strength/Magic/Ranged, any level Defence/Hitpoints/Prayer)",
+            color=0x3498db,
+            timestamp=datetime.now()
+        )
+        
+        # List of Dagannoth Kings
+        kings = [
+            "dagannoth_prime", "dagannoth_rex", "dagannoth_supreme"
+        ]
+        
+        # Combined player data across all kings
+        players_data = {}
+        
+        # Process each king
+        for king_name in kings:
+            # Get the highscores for this king
+            king_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=king_name)
+            if not king_hiscores:
+                continue
+            
+            # Process top players
+            max_to_check = min(20, len(king_hiscores))
+            
+            # Create validation tasks
+            validation_tasks = []
+            for entry in king_hiscores[:max_to_check]:
+                player_name = entry['player']['displayName']
+                validation_tasks.append((entry, self.is_valid_player(player_name)))
+            
+            # Process results
+            for entry, validation_task in validation_tasks:
+                is_valid = await validation_task
+                if is_valid:
+                    player_name = entry['player']['displayName']
+                    
+                    if 'data' in entry and 'kills' in entry['data']:
+                        kills = entry['data']['kills']
+                        
+                        # Only include if they have kills for this king
+                        if kills > 0:
+                            # Add or update player data
+                            if player_name not in players_data:
+                                players_data[player_name] = {
+                                    'total_kills': 0,
+                                    'kings': {}
+                                }
+                            
+                            # Add king-specific data
+                            king_display_name = ' '.join(word.capitalize() for word in king_name.split('_'))
+                            players_data[player_name]['kings'][king_display_name] = kills
+                            players_data[player_name]['total_kills'] += kills
+        
+        # Convert to list for sorting
+        players_list = [{'name': name, **data} for name, data in players_data.items()]
+        
+        # Sort by total kills
+        players_list.sort(key=lambda x: -x['total_kills'])
+        
+        # Add top 15 players to the embed
+        combined_text = ""
+        for i, player in enumerate(players_list[:15], 1):
+            kings_text = " | ".join(f"{king}: {kills}" for king, kills in player['kings'].items())
+            combined_text += f"{i}. {player['name']} - {player['total_kills']:,} total ({kings_text})\n"
+        
+        if combined_text:
+            embed.add_field(name="Top Dagannoth Kings Killers", value=combined_text, inline=False)
+        else:
+            embed.add_field(name="Top Dagannoth Kings Killers", value="No players found with Dagannoth Kings kills", inline=False)
+        
+        # Add individual top killers for each king
+        for king_name in kings:
+            display_name = ' '.join(word.capitalize() for word in king_name.split('_'))
+            
+            # Filter players who have kills for this specific king
+            king_players = [p for p in players_list if display_name in p['kings']]
+            
+            # Sort by kills for this specific king
+            king_players.sort(key=lambda x: -x['kings'].get(display_name, 0))
+            
+            # Create field text
+            king_text = ""
+            for i, player in enumerate(king_players[:5], 1):
+                king_text += f"{i}. {player['name']} - {player['kings'].get(display_name, 0):,} KC\n"
+            
+            if king_text:
+                embed.add_field(name=f"Top {display_name} Killers", value=king_text, inline=True)
+        
+        # Add footer
+        embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
+        
+        return embed
+    except Exception as e:
+        print(f"Error creating Dagannoth Kings embed: {str(e)}")
+        # Create an error embed
+        error_embed = discord.Embed(
+            title="Error",
+            description=f"An error occurred while creating the Dagannoth Kings highscores: {str(e)}",
+            color=0xFF0000
+        )
+        return error_embed
+        
+async def update_highscores(self, message=None, view_type="total", force_refresh=False):
         try:
             # Get group details
             group_details = await self.wom_client.get_group_hiscores(self.GROUP_ID)
