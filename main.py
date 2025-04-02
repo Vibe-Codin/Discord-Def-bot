@@ -77,9 +77,6 @@ async def fetch_clan_data():
                 
                 print(f"Successfully fetched data for {len(players)} members")
                 return players
-                    except Exception as e:
-                        print(f"Error parsing JSON response: {str(e)}")
-                        return None
     except Exception as e:
         print(f"Error fetching clan data: {str(e)}")
         return None
