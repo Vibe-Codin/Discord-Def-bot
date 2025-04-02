@@ -48,7 +48,8 @@ class HighscoresView(View):
 
     async def skills_button_callback(self, interaction):
         try:
-            await interaction.response.defer(ephemeral=True)
+            # Show a loading message to the user who clicked
+            await interaction.response.send_message("Switching to Skills category... Please wait.", ephemeral=True)
 
             # Create a new view with skills as active category
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
@@ -66,25 +67,26 @@ class HighscoresView(View):
 
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
-                await interaction.followup.send("Switched to Skills category", ephemeral=True)
+                await interaction.edit_original_response(content="✅ Switched to Skills category")
             except discord.errors.HTTPException as e:
                 print(f"Error editing message in skills button: {str(e)}")
                 try:
                     await interaction.message.channel.send(embed=embed, view=new_view)
-                    await interaction.followup.send("Created new Skills embed (couldn't update existing message)", ephemeral=True)
+                    await interaction.edit_original_response(content="✅ Created new Skills embed (couldn't update existing message)")
                 except Exception as e2:
                     print(f"Error sending new message: {str(e2)}")
-                    await interaction.followup.send("Failed to update or create Skills embed", ephemeral=True)
+                    await interaction.edit_original_response(content="❌ Failed to update or create Skills embed")
         except Exception as e:
             print(f"Error in skills_button_callback: {str(e)}")
             try:
-                await interaction.followup.send("An error occurred while processing your request", ephemeral=True)
+                await interaction.edit_original_response(content="❌ An error occurred while processing your request")
             except:
-                print("Could not send error followup")
+                print("Could not update error message")
 
     async def bosses_button_callback(self, interaction):
         try:
-            await interaction.response.defer(ephemeral=True)
+            # Show a loading message to the user who clicked
+            await interaction.response.send_message("Switching to Bosses category... Please wait.", ephemeral=True)
 
             # Create a new view with bosses as active category
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
@@ -104,21 +106,21 @@ class HighscoresView(View):
 
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
-                await interaction.followup.send("Switched to Bosses category", ephemeral=True)
+                await interaction.edit_original_response(content="✅ Switched to Bosses category")
             except discord.errors.HTTPException as e:
                 print(f"Error editing message in bosses button: {str(e)}")
                 try:
                     await interaction.message.channel.send(embed=embed, view=new_view)
-                    await interaction.followup.send("Created new Bosses embed (couldn't update existing message)", ephemeral=True)
+                    await interaction.edit_original_response(content="✅ Created new Bosses embed (couldn't update existing message)")
                 except Exception as e2:
                     print(f"Error sending new message: {str(e2)}")
-                    await interaction.followup.send("Failed to update or create Bosses embed", ephemeral=True)
+                    await interaction.edit_original_response(content="❌ Failed to update or create Bosses embed")
         except Exception as e:
             print(f"Error in bosses_button_callback: {str(e)}")
             try:
-                await interaction.followup.send("An error occurred while processing your request", ephemeral=True)
+                await interaction.edit_original_response(content="❌ An error occurred while processing your request")
             except:
-                print("Could not send error followup")
+                print("Could not update error message")
 
 # Dropdown menu for highscores selection
 class SkillsDropdown(discord.ui.Select):
@@ -204,18 +206,18 @@ class SkillsDropdown(discord.ui.Select):
 
             # Only send followup if we successfully edited the message
             if edited:
-                # Send a follow-up message that's only visible to the user who clicked
+                # Update the "please wait" message instead of sending a new one
                 category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
                 try:
                     if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
                         time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
-                        await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+                        await interaction.edit_original_response(content=f"✅ {category_name} highscores displayed! (cached from {time_ago} ago)")
                     else:
-                        await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+                        await interaction.edit_original_response(content=f"✅ {category_name} highscores updated!")
                 except Exception as e:
-                    print(f"Error sending followup: {str(e)}")
+                    print(f"Error updating original response: {str(e)}")
             else:
-                await interaction.followup.send("Failed to update the highscores display", ephemeral=True)
+                await interaction.edit_original_response(content="❌ Failed to update the highscores display")
 
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0] if hasattr(self, 'values') and self.values else 'unknown'}")
@@ -316,18 +318,18 @@ class BossesDropdown(discord.ui.Select):
 
             # Only send followup if we successfully edited the message
             if edited:
-                # Send a follow-up message that's only visible to the user who clicked
+                # Update the "please wait" message instead of sending a new one
                 category_name = next((option.label for option in self.options if option.value == selected_value), selected_value)
                 try:
                     if cached_entry and cache_age < 86400:  # Use cached embed if less than 24 hours old
                         time_ago = f"{int(cache_age/60)} minutes" if cache_age < 3600 else f"{int(cache_age/3600)} hours"
-                        await interaction.followup.send(f"{category_name} highscores displayed! (cached from {time_ago} ago)", ephemeral=True)
+                        await interaction.edit_original_response(content=f"✅ {category_name} highscores displayed! (cached from {time_ago} ago)")
                     else:
-                        await interaction.followup.send(f"{category_name} highscores updated!", ephemeral=True)
+                        await interaction.edit_original_response(content=f"✅ {category_name} highscores updated!")
                 except Exception as e:
-                    print(f"Error sending followup: {str(e)}")
+                    print(f"Error updating original response: {str(e)}")
             else:
-                await interaction.followup.send("Failed to update the highscores display", ephemeral=True)
+                await interaction.edit_original_response(content="❌ Failed to update the highscores display")
 
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0] if hasattr(self, 'values') and self.values else 'unknown'}")
