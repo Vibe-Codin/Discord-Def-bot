@@ -40,16 +40,50 @@ async def fetch_clan_data():
         # Use headers according to API documentation
         headers = {
             'Accept': 'application/json',
-            'User-Agent': 'OSRS-Defence-Discord-Bot/1.0',
-            'Content-Type': 'application/json'
+            'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
         }
         
         # Try different API endpoints based on documentation
+        # First, get the group details to verify we can access the correct clan
+        group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"
+        print(f"Fetching group details from: {group_endpoint}")
+        
+        import requests
+        try:
+            # First try to use requests library directly to reduce any potential issues
+            response = requests.get(group_endpoint, headers=headers, timeout=15)
+            print(f"Group details response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                try:
+                    group_data = response.json()
+                    print(f"Group data: {json.dumps(group_data, indent=2)[:200]}...")
+                    
+                    # If we got valid group data, now fetch members
+                    if 'id' in group_data:
+                        group_id = group_data['id']
+                        print(f"Found group ID: {group_id}")
+                        
+                        # Use the found group ID to fetch members
+                        members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{group_id}/members"
+                        print(f"Fetching members from: {members_endpoint}")
+                        
+                        members_response = requests.get(members_endpoint, headers=headers, timeout=15)
+                        if members_response.status_code == 200:
+                            members_data = members_response.json()
+                            print(f"Found {len(members_data)} members")
+                            return members_data
+                except json.JSONDecodeError as e:
+                    print(f"Error decoding group JSON: {e}")
+        except Exception as e:
+            print(f"Error with direct request: {e}")
+        
+        # If direct request failed, try aiohttp as fallback
         endpoints = [
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores",  # Get group hiscores (includes all member stats)
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/gained",     # Try gained stats endpoint
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/statistics", # Try statistics endpoint
-            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence/hiscores"  # Try by name as fallback
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence",  # Get group details first
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/details",  # Get group details by ID
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members",  # Then get members
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/competitions" # Try competitions as a fallback
         ]
         
         async with aiohttp.ClientSession() as session:
@@ -243,20 +277,25 @@ async def testapi(interaction: discord.Interaction):
         # Try multiple methods to get API data
         test_results = []
         
-        # Method 1: aiohttp with browser-like headers
+        # Try using the documented API endpoints more precisely
         headers = {
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Cache-Control': 'no-cache',
-            'Accept-Encoding': 'identity'  # Explicitly disable compression
+            'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
         }
         
-        # Try different endpoints based on API documentation
+        # Using documentation at https://docs.wiseoldman.net/
         endpoints = [
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",  # Group details
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores",  # Group hiscores
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members",  # Group members
-            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"  # Group by name
+            # Try to get the group by name first
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence",
+            
+            # Group endpoints
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",
+            
+            # Member endpoints
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members", 
+            
+            # Competition endpoints
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/competitions"
         ]
         
         async with aiohttp.ClientSession() as session:
@@ -278,12 +317,92 @@ async def testapi(interaction: discord.Interaction):
                 except Exception as e:
                     test_results.append(f"URL: {url}\nError: {str(e)}\n\n")
         
-        # Method 2: Try direct HTTP request 
+        # Method 2: Try direct HTTP request with better response handling
         import requests
         for url in endpoints:
             try:
-                response = requests.get(url, headers=headers, timeout=10)
-                test_results.append(f"Direct request to {url}\nStatus: {response.status_code}\nResponse: {response.text[:200]}\n\n")
+                response = requests.get(url, headers=headers, timeout=15)
+                status_code = response.status_code
+                test_results.append(f"Direct request to {url}\nStatus: {status_code}")
+                
+                # Try to parse JSON if the response has content
+                if response.text and response.text.strip():
+                    try:
+                        json_data = response.json()
+                        formatted_json = json.dumps(json_data, indent=2)[:500]
+                        test_results.append(f"Response: {formatted_json}...\n\n")
+                    except json.JSONDecodeError:
+
+
+@bot.tree.command(name="testgroup", description="Test fetching the group details from Wise Old Man API")
+async def testgroup(interaction: discord.Interaction):
+    await interaction.response.defer()
+    try:
+        # Try to get the group details by name
+        headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
+        }
+        
+        # Try both name and ID methods
+        group_urls = [
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence",
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+        ]
+        
+        results = []
+        
+        # Use requests for maximum compatibility
+        import requests
+        for url in group_urls:
+            try:
+                response = requests.get(url, headers=headers, timeout=15)
+                status_code = response.status_code
+                results.append(f"URL: {url}\nStatus: {status_code}")
+                
+                if response.text and response.text.strip():
+                    try:
+                        json_data = response.json()
+                        formatted_json = json.dumps(json_data, indent=2)
+                        results.append(f"Response: {formatted_json}\n\n")
+                        
+                        if 'id' in json_data:
+                            group_id = json_data['id']
+                            results.append(f"Found group ID: {group_id}")
+                            
+                            # Try to get members for this group
+                            members_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{group_id}/members"
+                            members_response = requests.get(members_url, headers=headers, timeout=15)
+                            
+                            if members_response.status_code == 200:
+                                members_data = members_response.json()
+                                member_count = len(members_data)
+                                results.append(f"Found {member_count} members")
+                                if member_count > 0:
+                                    # Show first member as example
+                                    results.append(f"First member: {json.dumps(members_data[0], indent=2)}")
+                    except json.JSONDecodeError:
+                        results.append(f"Response: {response.text[:200]} (Not valid JSON)\n\n")
+                else:
+                    results.append(f"Response: Empty content\n\n")
+            except Exception as e:
+                results.append(f"Error with {url}: {str(e)}\n\n")
+        
+        # Send results
+        debug_info = "Group Test Results:\n\n" + "\n".join(results)
+        if len(debug_info) > 2000:
+            # Split long messages
+            parts = [debug_info[i:i+1900] for i in range(0, len(debug_info), 1900)]
+            for i, part in enumerate(parts):
+                await interaction.followup.send(f"Part {i+1}/{len(parts)}:\n{part}")
+        else:
+            await interaction.followup.send(debug_info)
+    except Exception as e:
+        await interaction.followup.send(f"Error in testgroup command: {str(e)}")
+
+                        test_results.append(f"Response: {response.text[:200]} (Not valid JSON)\n\n")
+                else:
+                    test_results.append(f"Response: Empty content\n\n")
             except Exception as e:
                 test_results.append(f"Direct request to {url}\nError: {str(e)}\n\n")
         
