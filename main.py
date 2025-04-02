@@ -6,7 +6,7 @@ import json
 
 # Set your Wise Old Man clan ID, channel ID, and base URL
 CLAN_ID = "2763"  # OSRS Defence clan ID
-WISE_OLD_MAN_BASE_URL = "https://api.wiseoldman.net/v2"  # Try v2 version
+WISE_OLD_MAN_BASE_URL = "https://api.wiseoldman.net/v2"  # Using v2 API
 CHANNEL_ID = 969159797058437170  # OSRS Defence Discord channel
 TOKEN = os.getenv('DISCORD_TOKEN', '')  # Get from environment variable
 
@@ -44,25 +44,26 @@ async def fetch_clan_data():
 
         # Try different API endpoints based on documentation
         # First, get the group details to verify we can access the correct clan
-        # Try different name formats for the group
-        group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"
-        alt_group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence"
-        print(f"Also trying alternative endpoint: {alt_group_endpoint}")
-        # Also try a fallback to the base URL without version
-        base_endpoint = "https://api.wiseoldman.net/groups/2763"
-        print(f"Also trying fallback endpoint: {base_endpoint}")
+        # v2 API format for group endpoints - correct format per WOM docs
+        group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+        group_by_name_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence"
         print(f"Fetching group details from: {group_endpoint}")
+        print(f"Also trying name endpoint: {group_by_name_endpoint}")
+        # Competition endpoint which seems to work
+        competitions_endpoint = f"{WISE_OLD_MAN_BASE_URL}/competitions"
+        print(f"Also trying competitions endpoint: {competitions_endpoint}")
 
         import requests
         try:
             # First try to use requests library directly to reduce any potential issues
             response = requests.get(group_endpoint, headers=headers, timeout=15)
-            
-            # If first attempt fails, try with alternative name format
-            if response.status_code != 200 or not response.text.strip():
-                print("First attempt failed, trying alternative name format")
-                response = requests.get(alt_group_endpoint, headers=headers, timeout=15)
             print(f"Group details response status: {response.status_code}")
+            
+            # If first attempt fails, try with name format
+            if response.status_code != 200 or not response.text.strip():
+                print("First attempt failed, trying by name")
+                response = requests.get(group_by_name_endpoint, headers=headers, timeout=15)
+                print(f"Group by name response status: {response.status_code}")
 
             if response.status_code == 200:
                 # Check if there's actual content before trying to parse JSON
@@ -109,11 +110,14 @@ async def fetch_clan_data():
             print(f"Error with direct request: {e}")
 
         # If direct request failed, try aiohttp as fallback
+        # Using correct v2 API endpoints from documentation
         endpoints = [
-            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence",  # Get group details first
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/details",  # Get group details by ID
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members",  # Then get members
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/competitions" # Try competitions as a fallback
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",  # Group details by ID
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence",  # Group details by name
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/gained",  # Group gained stats
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/records",  # Group records
+            f"{WISE_OLD_MAN_BASE_URL}/competitions?groupId={CLAN_ID}",  # Group competitions
+            f"{WISE_OLD_MAN_BASE_URL}/players/search/names?username=Defence" # Search for players
         ]
 
         async with aiohttp.ClientSession() as session:
@@ -315,17 +319,19 @@ async def testapi(interaction: discord.Interaction):
 
         # Using documentation at https://docs.wiseoldman.net/
         endpoints = [
-            # Try to get the group by name first
-            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence",
-
-            # Group endpoints
+            # Group endpoints from docs
             f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",
-
-            # Member endpoints
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members", 
-
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence",
+            
+            # Group stats endpoints
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/gained",
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/records",
+            
             # Competition endpoints
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/competitions"
+            f"{WISE_OLD_MAN_BASE_URL}/competitions?groupId={CLAN_ID}",
+            
+            # Player search - might help identify group members
+            f"{WISE_OLD_MAN_BASE_URL}/players/search/names?username=Defence"
         ]
 
         async with aiohttp.ClientSession() as session:
@@ -390,10 +396,11 @@ async def testgroup(interaction: discord.Interaction):
             'User-Agent': 'OSRS-Defence-Discord-Bot/1.0'
         }
 
-        # Try both name and ID methods
+        # Try group endpoints from documentation
         group_urls = [
-            f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence",
-            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+            f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}",
+            f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence",
+            f"{WISE_OLD_MAN_BASE_URL}/competitions?groupId={CLAN_ID}"
         ]
 
         results = []
