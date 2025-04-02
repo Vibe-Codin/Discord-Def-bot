@@ -479,15 +479,28 @@ class HighscoresBot(discord.Client):
         # Sort players by total level and then by total exp (both descending)
         processed_players.sort(key=lambda x: (-x['total_level'], -x['total_exp']))
 
-        # Add the top 20 by Total Level (or fewer if not enough valid players)
-        top_text = ""
+        # Add the top 15 by Total Level
+        top_level_text = ""
         if processed_players:
-            for i, player in enumerate(processed_players[:20], 1):
-                top_text += f"{i}. {player['name']} | Total: {player['total_level']} | XP: {player['total_exp']:,}\n"
+            # Sort by total level first, then by total exp
+            level_sorted = sorted(processed_players, key=lambda x: (-x['total_level'], -x['total_exp']))
+            for i, player in enumerate(level_sorted[:15], 1):
+                top_level_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
         else:
-            top_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
+            top_level_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
 
-        embed.add_field(name="Top 20 Players by Total Level", value=top_text, inline=False)
+        # Add the top 15 by Total Experience
+        top_exp_text = ""
+        if processed_players:
+            # Sort purely by total exp
+            exp_sorted = sorted(processed_players, key=lambda x: -x['total_exp'])
+            for i, player in enumerate(exp_sorted[:15], 1):
+                top_exp_text += f"{i}. {player['name']} | Lvl: {player['total_level']} | XP: {player['total_exp']:,}\n"
+        else:
+            top_exp_text = "No players found meeting the criteria (≤ 2 in Attack/Strength/Magic/Ranged)"
+
+        embed.add_field(name="Top 15 Players by Total Level", value=top_level_text, inline=False)
+        embed.add_field(name="Top 15 Players by Total Experience", value=top_exp_text, inline=False)
         print(f"Filtering stats: {valid_player_count} players included, {excluded_count} excluded")
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')} | {valid_player_count} valid players")
 
