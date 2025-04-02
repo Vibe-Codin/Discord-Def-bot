@@ -475,7 +475,7 @@ class HighscoresBot(discord.Client):
         # Use a bounded semaphore to limit concurrent API calls
         # and process players in batches to avoid overwhelming the API
 
-        print(f"Processing {len(overall_hiscores)} players for total level highscores")
+        print(f"Processing up to 30 players for total level highscores")
 
         # Process players in batches to validate them
         batch_size = 10  # Process 10 players at a time
@@ -1262,6 +1262,11 @@ async def on_ready():
                 message = await interaction.followup.send(embed=embed, view=view)
                 client.last_message = message
 
+                # Store the current time in the cache_times dictionary
+                if not hasattr(client, 'cache_times'):
+                    client.cache_times = {}
+                client.cache_times["total"] = time.time()
+
                 # Update cache in background
                 asyncio.create_task(client.update_highscores(force_refresh=True))
             else:
@@ -1377,7 +1382,7 @@ async def preload_categories(bot):
         bosses_overview_embed = await bot.create_bosses_overview_embed()
         if bosses_overview_embed and isinstance(bosses_overview_embed, discord.Embed):
             bot.cached_embeds["bosses_overview"] = bosses_overview_embed
-            print(""Preloaded bosses overview")
+            print("Preloaded bosses overview")
     except Exception as e:
         print(f"Error preloading bosses overview: {str(e)}")
 
