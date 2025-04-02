@@ -126,6 +126,10 @@ class SkillsDropdown(discord.ui.Select):
 
             # Check if we have a cached embed
             cached_entry = self.cached_embeds.get(selected_value, None)
+            cache_age = 0
+
+            if cached_entry and hasattr(self.bot, 'cache_times') and selected_value in self.bot.cache_times:
+                cache_age = current_time - self.bot.cache_times[selected_value]
 
             if cached_entry:
                 embed = cached_entry
@@ -278,6 +282,7 @@ class WOMClient:
         self.cache = {}  # Simple cache for API responses
         self.cache_expiry = {}  # Track when cache entries expire
         self.CACHE_DURATION = 86400  # Cache duration in seconds (24 hours)
+        self.api_semaphore = asyncio.Semaphore(5) # Added semaphore here
 
     async def _get_cached_or_fetch(self, cache_key, url, params=None, timeout=15):
         current_time = time.time()
@@ -290,11 +295,12 @@ class WOMClient:
         # Make the API request with retry logic for rate limits
         max_retries = 5  # Increased max retries
         retry_count = 0
-        
+
         while retry_count <= max_retries:
             try:
-                response = self.session.get(url, params=params, timeout=timeout)
-                
+                async with self.api_semaphore: # Acquire semaphore before making request
+                    response = self.session.get(url, params=params, timeout=timeout)
+
                 if response.status_code == 200:
                     data = response.json()
                     # Cache the successful response
@@ -328,7 +334,7 @@ class WOMClient:
                         print(f"Using older cached data for {cache_key} as fallback after error")
                         return self.cache[cache_key]
                     return None
-        
+
         # If we've exhausted all retries
         return None
 
@@ -523,23 +529,23 @@ class HighscoresBot(discord.Client):
         # Process up to 30 players to get at least 20 valid ones
         max_players_to_check = min(30, len(overall_hiscores))
         batches = [overall_hiscores[i:i+batch_size] for i in range(0, max_players_to_check, batch_size)]
-        
+
         # Track how many players we've fully processed
         players_processed = 0
-        
+
         for batch_index, batch in enumerate(batches):
             # Create tasks for validating all players in the batch concurrently
             validation_tasks = []
             for entry in batch:
                 player_name = entry['player']['displayName']
-                validation_tasks.append((player_name, entry, self.is_valid_player(player_name)))
+                validation_tasks.append((player_name, entry, asyncio.create_task(self.is_valid_player(player_name))))
 
             # Process results as they complete
             for player_name, entry, validation_task in validation_tasks:
                 try:
                     players_processed += 1
                     is_valid = await validation_task
-                    
+
                     if not is_valid:
                         print(f"FILTERED OUT: {player_name} - over combat skill limit or missing data")
                         excluded_count += 1
@@ -567,7 +573,7 @@ class HighscoresBot(discord.Client):
                         'total_level': total_level,
                         'total_exp': total_exp
                     })
-                    
+
                 except Exception as e:
                     if "429" in str(e):
                         print(f"Rate limited while processing player {player_name}. Waiting before retrying.")
@@ -580,7 +586,7 @@ class HighscoresBot(discord.Client):
             delay = min(1.0 + (batch_index * 0.5), 5.0)  # Gradually increase delay up to 5 seconds
             print(f"Waiting {delay:.1f}s before next batch to avoid rate limits...")
             await asyncio.sleep(delay)
-            
+
         print(f"Processed a total of {players_processed} players out of requested {max_players_to_check}")
 
         # Print the actual number of players we processed vs filtered
@@ -621,7 +627,7 @@ class HighscoresBot(discord.Client):
         all_skills = [
             'defence', 'hitpoints', 'prayer', 
             'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting',
-            'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',
+            'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer,
             'farming', 'runecrafting', 'hunter', 'construction'
         ]
 
@@ -666,7 +672,7 @@ class HighscoresBot(discord.Client):
             validation_tasks = []
             for entry in batch:
                 player_name = entry['player']['displayName']
-                validation_tasks.append((player_name, self.is_valid_player(player_name)))
+                validation_tasks.append((player_name, asyncio.create_task(self.is_valid_player(player_name))))
 
             # Process the results
             for player_name, validation_task in validation_tasks:
@@ -693,7 +699,7 @@ class HighscoresBot(discord.Client):
                 validation_tasks = []
                 for entry in current_batch:
                     player_name = entry['player']['displayName']
-                    validation_tasks.append((entry, self.is_valid_player(player_name)))
+                    validation_tasks.append((entry, asyncio.create_task(self.is_valid_player(player_name))))
 
                 for entry, validation_task in validation_tasks:
                     is_valid = await validation_task
@@ -703,7 +709,7 @@ class HighscoresBot(discord.Client):
                         skill_level = 0
                         exp = 0
 
-                                                # Get data from the entry
+                        # Get data from the entry
                         if 'data' in entry:
                             data = entry['data']
                             if 'level' in data:
@@ -824,7 +830,7 @@ class HighscoresBot(discord.Client):
                 validation_tasks = []
                 for entry in batch:
                     player_name = entry['player']['displayName']
-                    validation_tasks.append((player_name, entry, self.is_valid_player(player_name)))
+                    validation_tasks.append((player_name, entry, asyncio.create_task(self.is_valid_player(player_name))))
 
                 # Process results in order of completion
                 valid_entries = []
@@ -943,7 +949,7 @@ class HighscoresBot(discord.Client):
                 validation_tasks = []
                 for entry in batch:
                     player_name = entry['player']['displayName']
-                    validation_tasks.append((entry, self.is_valid_player(player_name)))
+                    validation_tasks.append((entry, asyncio.create_task(self.is_valid_player(player_name))))
 
                 # Process results
                 for entry, validation_task in validation_tasks:
@@ -1081,7 +1087,7 @@ class HighscoresBot(discord.Client):
                             validation_tasks = []
                             for entry in boss_hiscores[:max_to_check]:
                                 player_name = entry['player']['displayName']
-                                validation_tasks.append((entry, self.is_valid_player(player_name)))
+                                validation_tasks.append((entry, asyncio.create_task(self.is_valid_player(player_name))))
 
                             # Process results
                             for entry, validation_task in validation_tasks:
@@ -1344,7 +1350,7 @@ async def on_ready():
                 else:
                     # Set proper timestamp for the embed
                     if isinstance(embed_or_error, discord.Embed):
-                        embed_or_error.timestamp = datetime.now()
+                        embed_or_error.timestamp = datetimenow()
                         # Store cache time in dictionary
                         if not hasattr(client, 'cache_times'):
                             client.cache_times = {}
@@ -1393,6 +1399,41 @@ async def on_ready():
         except Exception as e:
             await interaction.followup.send(f"Error refreshing highscores: {str(e)}", ephemeral=True)
             print(f"Error in refresh command: {str(e)}")
+
+    @client.tree.command(name="freshembed", description="Create a fresh highscores embed")
+    async def freshembed(interaction):
+        # Defer with ephemeral=True to only show loading to the user who triggered it
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        try:
+            # Send a quick ephemeral response to the user who triggered the command
+            await interaction.followup.send("Creating a fresh highscores embed...", ephemeral=True)
+
+            # Force refresh the cache first
+            embed_or_error = await client.update_highscores(force_refresh=True)
+
+            if isinstance(embed_or_error, str):
+                await interaction.followup.send(f"⚠️ {embed_or_error}", ephemeral=True)
+            else:
+                # Set proper timestamp for the embed
+                if isinstance(embed_or_error, discord.Embed):
+                    embed_or_error.timestamp = datetime.now()
+                    client.cached_embeds["total"] = embed_or_error
+
+                # Create a new view with the refreshed embeds
+                view = HighscoresView(client, client.cached_embeds)
+
+                # Send a new message to the channel
+                channel = interaction.channel
+                if channel:
+                    message = await channel.send("🔄 **Fresh Highscores**", embed=embed_or_error, view=view)
+                    client.last_message = message
+                    await interaction.followup.send("Fresh highscores embed created successfully!", ephemeral=True)
+                else:
+                    await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error creating fresh embed: {str(e)}", ephemeral=True)
+            print(f"Error in freshembed command: {str(e)}")
 
     # Sync the commands with Discord
     print("Syncing commands with Discord...")
@@ -1481,14 +1522,14 @@ async def push_fresh_embed():
                 if channel.permissions_for(guild.me).send_messages:
                     # Create a fresh embed
                     embed_or_error = await client.update_highscores(force_refresh=True)
-                    
+
                     if isinstance(embed_or_error, str):
                         await channel.send(f"⚠️ {embed_or_error}")
                     else:
                         # Set proper timestamp for the embed
                         if isinstance(embed_or_error, discord.Embed):
                             embed_or_error.timestamp = datetime.now()
-                            
+
                             # Create view with buttons
                             view = HighscoresView(client, client.cached_embeds)
                             message = await channel.send("🔄 **Fresh Highscores**", embed=embed_or_error, view=view)
@@ -1504,7 +1545,7 @@ async def push_fresh_embed():
 async def on_message(message):
     if message.author == client.user:
         return
-        
+
     if message.content.lower() == '!freshembed':
         await push_fresh_embed()
         try:
@@ -1604,7 +1645,7 @@ async def on_ready():
 
     # Preload categories in the background
     asyncio.create_task(preload_categories(client))
-    
+
     # Push a fresh embed to the channel
     await push_fresh_embed()
 
@@ -1692,13 +1733,50 @@ def setup_commands():
             await interaction.followup.send(f"Error refreshing highscores: {str(e)}", ephemeral=True)
             print(f"Error in refresh command: {str(e)}")
 
+    @client.tree.command(name="freshembed", description="Create a fresh highscores embed")
+    async def freshembed(interaction):
+        # Defer with ephemeral=True to only show loading to the user who triggered it
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        try:
+            # Send a quick ephemeral response to the user who triggered the command
+            await interaction.followup.send("Creating a fresh highscores embed...", ephemeral=True)
+
+            # Force refresh the cache first
+            embed_or_error = await client.update_highscores(force_refresh=True)
+
+            if isinstance(embed_or_error, str):
+                await interaction.followup.send(f"⚠️ {embed_or_error}", ephemeral=True)
+            else:
+                # Set proper timestamp for the embed
+                if isinstance(embed_or_error, discord.Embed):
+                    embed_or_error.timestamp = datetime.now()
+                    client.cached_embeds["total"] = embed_or_error
+
+                # Create a new view with the refreshed embeds
+                view = HighscoresView(client, client.cached_embeds)
+
+                # Send a new message to the channel
+                channel = interaction.channel
+                if channel:
+                    message = await channel.send("🔄 **Fresh Highscores**", embed=embed_or_error, view=view)
+                    client.last_message = message
+                    await interaction.followup.send("Fresh highscores embed created successfully!", ephemeral=True)
+                else:
+                    await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error creating fresh embed: {str(e)}", ephemeral=True)
+            print(f"Error in freshembed command: {str(e)}")
+
     # Sync the commands with Discord
     print("Syncing commands with Discord...")
     try:
         # Clear any existing commands first
         client.tree.clear_commands(guild=None)
+        # Register the commands to the tree
+
         # Sync the commands globally (may take up to an hour to propagate)
-        asyncio.create_task(client.tree.sync())
+        await client.tree.sync()
         print("Commands synced successfully!")
     except Exception as e:
         print(f"Error syncing commands: {str(e)}")
