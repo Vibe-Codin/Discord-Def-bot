@@ -533,7 +533,7 @@ class HighscoresBot(discord.Client):
 
         # Print the actual number of players we processed vs filtered
         print(f"Processed {len(processed_players)} valid players from {max_players_to_check} total checked")
-        
+
         # Sort players by total level and then by total exp (both descending)
         processed_players.sort(key=lambda x: (-x['total_level'], -x['total_exp']))
 
@@ -651,7 +651,7 @@ class HighscoresBot(discord.Client):
                         skill_level = 0
                         exp = 0
 
-                        # Get data from the entry
+                                                # Get data from the entry
                         if 'data' in entry:
                             data = entry['data']
                             if 'level' in data:
@@ -819,6 +819,13 @@ class HighscoresBot(discord.Client):
         for boss_data in boss_results:
             if boss_data['has_data']:
                 embed.add_field(name=boss_data['name'], value=boss_data['text'], inline=True)
+            else:
+                # Add a placeholder message
+                embed.add_field(
+                    name=boss_data['name'],
+                    value="No qualifying players found with kills",
+                    inline=True
+                )
 
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
         return embed
@@ -904,15 +911,15 @@ class HighscoresBot(discord.Client):
                                         'level': level,
                                         'exp': exp
                                     })
-                            else:  # It's a boss
-                                if 'data' in entry and 'kills' in entry['data']:
-                                    kills = entry['data']['kills']
-                                    # Only include if they have kills for this boss
-                                    if kills > 0:
-                                        valid_players.append({
-                                            'name': player_name,
-                                            'kills': kills
-                                        })
+                        else:  # It's a boss
+                            if 'data' in entry and 'kills' in entry['data']:
+                                kills = entry['data']['kills']
+                                # Only include if they have kills for this boss
+                                if kills > 0:
+                                    valid_players.append({
+                                        'name': player_name,
+                                        'kills': kills
+                                    })
 
                         # If we have enough players, stop processing
                         if len(valid_players) >= 15:  # We only display 15 anyway
@@ -1362,8 +1369,7 @@ async def on_ready():
                     # Set proper timestamp for the embed
                     if isinstance(embed_or_error, discord.Embed):
                         embed_or_error.timestamp = datetime.now()
-                        # Store cache time in dictionary
-                        if not hasattr(client, 'cache_times'):
+                        # Store cache time in dictionary                        if not hasattr(client, 'cache_times'):
                             client.cache_times = {}
                         client.cache_times["total"] = time.time()
 
