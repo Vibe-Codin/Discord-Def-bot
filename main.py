@@ -627,7 +627,7 @@ class HighscoresBot(discord.Client):
         all_skills = [
             'defence', 'hitpoints', 'prayer', 
             'cooking', 'woodcutting', 'fletching', 'fishing', 'firemaking', 'crafting',
-            'smithing', 'mining', 'herblore', 'agility', ''thieving', 'slayer,
+            'smithing', 'mining', 'herblore', 'agility', 'thieving', 'slayer',
             'farming', 'runecrafting', 'hunter', 'construction'
         ]
 
