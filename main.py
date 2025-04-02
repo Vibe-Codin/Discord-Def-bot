@@ -13,20 +13,26 @@ class HighscoresView(View):
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
 
-        # Add the three buttons
+        # Add five buttons - total, skills, and three boss buttons
         total_btn = Button(style=discord.ButtonStyle.primary, label="Total Level", custom_id="total")
         skills_btn = Button(style=discord.ButtonStyle.primary, label="Skills", custom_id="skills")
-        bosses_btn = Button(style=discord.ButtonStyle.primary, label="Bosses", custom_id="bosses")
+        bosses1_btn = Button(style=discord.ButtonStyle.primary, label="Bosses 1", custom_id="bosses1")
+        bosses2_btn = Button(style=discord.ButtonStyle.primary, label="Bosses 2", custom_id="bosses2")
+        bosses3_btn = Button(style=discord.ButtonStyle.primary, label="Bosses 3", custom_id="bosses3")
 
         # Add button click handlers
         total_btn.callback = self.total_callback
         skills_btn.callback = self.skills_callback
-        bosses_btn.callback = self.bosses_callback
+        bosses1_btn.callback = self.bosses1_callback
+        bosses2_btn.callback = self.bosses2_callback
+        bosses3_btn.callback = self.bosses3_callback
 
         # Add buttons to the view
         self.add_item(total_btn)
         self.add_item(skills_btn)
-        self.add_item(bosses_btn)
+        self.add_item(bosses1_btn)
+        self.add_item(bosses2_btn)
+        self.add_item(bosses3_btn)
 
     async def total_callback(self, interaction):
         try:
@@ -62,22 +68,56 @@ class HighscoresView(View):
         except Exception as e:
             print(f"Error in skills callback: {str(e)}")
 
-    async def bosses_callback(self, interaction):
+    async def bosses1_callback(self, interaction):
         try:
             # Use defer with ephemeral=False to acknowledge the interaction faster
             await interaction.response.defer(ephemeral=False, thinking=True)
             
-            if "bosses" in self.cached_embeds:
-                embed = self.cached_embeds["bosses"]
+            if "bosses1" in self.cached_embeds:
+                embed = self.cached_embeds["bosses1"]
             else:
-                embed = await self.bot.update_highscores(view_type="bosses")
-                self.cached_embeds["bosses"] = embed
+                embed = await self.bot.update_highscores(view_type="bosses1")
+                self.cached_embeds["bosses1"] = embed
                 
             await interaction.message.edit(embed=embed, view=self)
         except discord_errors.NotFound:
-            print("Interaction expired for bosses button")
+            print("Interaction expired for bosses1 button")
         except Exception as e:
-            print(f"Error in bosses callback: {str(e)}")
+            print(f"Error in bosses1 callback: {str(e)}")
+            
+    async def bosses2_callback(self, interaction):
+        try:
+            # Use defer with ephemeral=False to acknowledge the interaction faster
+            await interaction.response.defer(ephemeral=False, thinking=True)
+            
+            if "bosses2" in self.cached_embeds:
+                embed = self.cached_embeds["bosses2"]
+            else:
+                embed = await self.bot.update_highscores(view_type="bosses2")
+                self.cached_embeds["bosses2"] = embed
+                
+            await interaction.message.edit(embed=embed, view=self)
+        except discord_errors.NotFound:
+            print("Interaction expired for bosses2 button")
+        except Exception as e:
+            print(f"Error in bosses2 callback: {str(e)}")
+            
+    async def bosses3_callback(self, interaction):
+        try:
+            # Use defer with ephemeral=False to acknowledge the interaction faster
+            await interaction.response.defer(ephemeral=False, thinking=True)
+            
+            if "bosses3" in self.cached_embeds:
+                embed = self.cached_embeds["bosses3"]
+            else:
+                embed = await self.bot.update_highscores(view_type="bosses3")
+                self.cached_embeds["bosses3"] = embed
+                
+            await interaction.message.edit(embed=embed, view=self)
+        except discord_errors.NotFound:
+            print("Interaction expired for bosses3 button")
+        except Exception as e:
+            print(f"Error in bosses3 callback: {str(e)}")
 
 # Discord bot token
 import os
@@ -216,17 +256,9 @@ class HighscoresBot(discord.Client):
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
         return embed
 
-    async def create_bosses_embed(self, group_name):
-        # Prepare bosses embed
-        embed = discord.Embed(
-            title=f"{group_name} Highscores - Bosses",
-            description=f"Top 5 players for each boss in {group_name}",
-            color=0x3498db,
-            timestamp=datetime.now()
-        )
-
-        # Add boss hiscores
-        bosses = [
+    async def create_bosses_embed(self, group_name, part=1):
+        # Split all bosses into three groups
+        all_bosses = [
             'abyssal_sire', 'alchemical_hydra', 'barrows_chests', 'bryophyta',
             'callisto', 'cerberus', 'chambers_of_xeric', 'chambers_of_xeric_challenge_mode',
             'chaos_elemental', 'chaos_fanatic', 'commander_zilyana', 'corporeal_beast',
@@ -241,8 +273,28 @@ class HighscoresBot(discord.Client):
             'venenatis', 'vetion', 'vorkath', 'wintertodt',
             'zalcano', 'zulrah'
         ]
+        
+        # Calculate how many bosses per part
+        bosses_per_part = len(all_bosses) // 3
+        if part == 1:
+            bosses = all_bosses[:bosses_per_part]
+            part_range = "1-16"
+        elif part == 2:
+            bosses = all_bosses[bosses_per_part:2*bosses_per_part]
+            part_range = "17-32"
+        else:  # part 3
+            bosses = all_bosses[2*bosses_per_part:]
+            part_range = "33-50"
+        
+        # Prepare bosses embed
+        embed = discord.Embed(
+            title=f"{group_name} Highscores - Bosses {part_range}",
+            description=f"Top 5 players for each boss in {group_name} (Part {part})",
+            color=0x3498db,
+            timestamp=datetime.now()
+        )
 
-        # Process bosses
+        # Process bosses for this part
         for boss in bosses:
             try:
                 boss_hiscores = await self.wom_client.get_group_hiscores(self.GROUP_ID, metric=boss)
@@ -271,6 +323,15 @@ class HighscoresBot(discord.Client):
 
         embed.set_footer(text=f"Last updated | {datetime.now().strftime('%I:%M %p')}")
         return embed
+        
+    async def create_bosses_embed1(self, group_name):
+        return await self.create_bosses_embed(group_name, part=1)
+        
+    async def create_bosses_embed2(self, group_name):
+        return await self.create_bosses_embed(group_name, part=2)
+        
+    async def create_bosses_embed3(self, group_name):
+        return await self.create_bosses_embed(group_name, part=3)
 
     async def update_highscores(self, message=None, view_type="total", force_refresh=False):
         try:
@@ -291,8 +352,12 @@ class HighscoresBot(discord.Client):
                 embed = await self.create_total_level_embed(group_name)
             elif view_type == "skills":
                 embed = await self.create_skills_embed(group_name)
-            elif view_type == "bosses":
-                embed = await self.create_bosses_embed(group_name)
+            elif view_type == "bosses1":
+                embed = await self.create_bosses_embed1(group_name)
+            elif view_type == "bosses2":
+                embed = await self.create_bosses_embed2(group_name)
+            elif view_type == "bosses3":
+                embed = await self.create_bosses_embed3(group_name)
             else:
                 embed = await self.create_total_level_embed(group_name)  # Default to total level
 
