@@ -335,10 +335,8 @@ class WOMClient:
 # Discord bot
 class HighscoresBot(discord.Client):
     def __init__(self, *args, **kwargs):
-        # Make sure intents are set properly
-        intents = discord.Intents.default()
-        intents.message_content = True
-        super().__init__(intents=intents, *args, **kwargs)
+        # Get intents from kwargs if provided, otherwise create default ones
+        super().__init__(*args, **kwargs)
 
         # Create command tree for slash commands
         self.tree = discord.app_commands.CommandTree(self)
@@ -1331,6 +1329,8 @@ async def on_ready():
     try:
         # Clear any existing commands first
         client.tree.clear_commands(guild=None)
+        # Register the commands to the tree
+        
         # Sync the commands globally (may take up to an hour to propagate)
         await client.tree.sync()
         print("Commands synced successfully!")
