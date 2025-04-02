@@ -55,14 +55,16 @@ class HighscoresView(View):
 
             if cache_age > 86400:  # If cache is older than 24 hours, refresh it
                 embed = await self.bot.update_highscores(view_type="total")
-                embed._cache_time = current_time
-                embed.timestamp = datetime.now()
-                self.cached_embeds["total"] = embed
+                if isinstance(embed, discord.Embed):
+                    embed._cache_time = current_time
+                    embed.timestamp = datetime.now()
+                    self.cached_embeds["total"] = embed
         else:
             embed = await self.bot.update_highscores(view_type="total")
-            embed._cache_time = time.time()
-            embed.timestamp = datetime.now()
-            self.cached_embeds["total"] = embed
+            if isinstance(embed, discord.Embed):
+                embed._cache_time = time.time()
+                embed.timestamp = datetime.now()
+                self.cached_embeds["total"] = embed
 
         await interaction.message.edit(embed=embed, view=new_view)
         await interaction.followup.send("Switched to Skills category", ephemeral=True)
@@ -83,14 +85,16 @@ class HighscoresView(View):
 
             if cache_age > 86400:  # If cache is older than 24 hours, refresh it
                 embed = await self.bot.create_bosses_overview_embed()
-                embed._cache_time = current_time
-                embed.timestamp = datetime.now()
-                self.cached_embeds[bosses_overview_key] = embed
+                if isinstance(embed, discord.Embed):
+                    embed._cache_time = current_time
+                    embed.timestamp = datetime.now()
+                    self.cached_embeds[bosses_overview_key] = embed
         else:
             embed = await self.bot.create_bosses_overview_embed()
-            embed._cache_time = time.time()
-            embed.timestamp = datetime.now()
-            self.cached_embeds[bosses_overview_key] = embed
+            if isinstance(embed, discord.Embed):
+                embed._cache_time = time.time()
+                embed.timestamp = datetime.now()
+                self.cached_embeds[bosses_overview_key] = embed
 
         await interaction.message.edit(embed=embed, view=new_view)
         await interaction.followup.send("Switched to Bosses category", ephemeral=True)
@@ -146,18 +150,20 @@ class SkillsDropdown(discord.ui.Select):
             elif selected_value == "total":
                 embed = await self.bot.update_highscores(view_type="total")
                 # Add a cache time attribute (not a timestamp for the embed)
-                embed._cache_time = current_time
-                # Set a proper discord.py timestamp
-                embed.timestamp = datetime.now()
-                self.cached_embeds["total"] = embed
+                if isinstance(embed, discord.Embed):
+                    embed._cache_time = current_time
+                    # Set a proper discord.py timestamp
+                    embed.timestamp = datetime.now()
+                    self.cached_embeds["total"] = embed
             else:
                 # For specific skill
                 embed = await self.bot.create_single_category_embed(selected_value)
                 # Add a cache time attribute (not a timestamp for the embed)
-                embed._cache_time = current_time
-                # Set a proper discord.py timestamp
-                embed.timestamp = datetime.now()
-                self.cached_embeds[selected_value] = embed
+                if isinstance(embed, discord.Embed):
+                    embed._cache_time = current_time
+                    # Set a proper discord.py timestamp
+                    embed.timestamp = datetime.now()
+                    self.cached_embeds[selected_value] = embed
 
             # Create a new HighscoresView with cached embeds to replace the existing view
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
@@ -237,15 +243,17 @@ class BossesDropdown(discord.ui.Select):
                 print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
             elif selected_value == "bosses_overview":
                 embed = await self.bot.create_bosses_overview_embed()
-                embed._cache_time = current_time
-                embed.timestamp = datetime.now()
-                self.cached_embeds["bosses_overview"] = embed
+                if isinstance(embed, discord.Embed):
+                    embed._cache_time = current_time
+                    embed.timestamp = datetime.now()
+                    self.cached_embeds["bosses_overview"] = embed
             else:
                 # For specific boss
                 embed = await self.bot.create_single_category_embed(selected_value)
-                embed._cache_time = current_time
-                embed.timestamp = datetime.now()
-                self.cached_embeds[selected_value] = embed
+                if isinstance(embed, discord.Embed):
+                    embed._cache_time = current_time
+                    embed.timestamp = datetime.now()
+                    self.cached_embeds[selected_value] = embed
 
             # Create a new HighscoresView with cached embeds to replace the existing view
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
@@ -1277,9 +1285,10 @@ async def on_ready():
                     await interaction.followup.send(f"⚠️ {embed_or_error}")
                 else:
                     # Set proper timestamp for the embed
-                    embed_or_error.timestamp = datetime.now()
-                    # Store cache time as a custom attribute
-                    setattr(embed_or_error, '_cache_time', time.time())
+                    if isinstance(embed_or_error, discord.Embed):
+                        embed_or_error.timestamp = datetime.now()
+                        # Store cache time as a custom attribute
+                        setattr(embed_or_error, '_cache_time', time.time())
 
                     # Create view with buttons
                     view = HighscoresView(client, client.cached_embeds)
@@ -1305,9 +1314,10 @@ async def on_ready():
                 await interaction.followup.send(f"⚠️ {embed_or_error}", ephemeral=True)
             else:
                 # Set proper timestamp for the embed
-                embed_or_error.timestamp = datetime.now()
-                # Store cache time as a custom attribute
-                setattr(embed_or_error, '_cache_time', time.time())
+                if isinstance(embed_or_error, discord.Embed):
+                    embed_or_error.timestamp = datetime.now()
+                    # Store cache time as a custom attribute
+                    setattr(embed_or_error, '_cache_time', time.time())
 
                 # Create a new message with refreshed highscores
                 view = HighscoresView(client, client.cached_embeds, active_category="skills")
@@ -1330,7 +1340,7 @@ async def on_ready():
         # Clear any existing commands first
         client.tree.clear_commands(guild=None)
         # Register the commands to the tree
-        
+
         # Sync the commands globally (may take up to an hour to propagate)
         await client.tree.sync()
         print("Commands synced successfully!")
@@ -1344,14 +1354,15 @@ async def on_ready():
     for guild in client.guilds:
         for channel in guild.text_channels:
             if channel.permissions_for(guild.me).send_messages:
-                embed_or_error = await client.update_highscores()
+                                embed_or_error = await client.update_highscores()
                 if isinstance(embed_or_error, str):
                     await channel.send(f"⚠️ {embed_or_error}")
                 else:
                     # Set proper timestamp for the embed
-                    embed_or_error.timestamp = datetime.now()
-                    # Store cache time as a custom attribute
-                    setattr(embed_or_error, '_cache_time', time.time())
+                    if isinstance(embed_or_error, discord.Embed):
+                        embed_or_error.timestamp = datetime.now()
+                        # Store cache time as a custom attribute
+                        setattr(embed_or_error, '_cache_time', time.time())
 
                     # Create view with buttons
                     view = HighscoresView(client, client.cached_embeds)
@@ -1364,17 +1375,20 @@ async def on_ready():
 async def preload_categories(bot):
     print("Preloading common highscore categories...")
     current_time = time.time()
+
     # Preload total first
     total_embed = await bot.update_highscores(view_type="total")
-    total_embed._cache_time = current_time
-    bot.cached_embeds["total"] = total_embed
+    if total_embed and isinstance(total_embed, discord.Embed):
+        setattr(total_embed, '_cache_time', current_time)
+        bot.cached_embeds["total"] = total_embed
 
     # Preload bosses overview
     try:
         bosses_overview_embed = await bot.create_bosses_overview_embed()
-        bosses_overview_embed._cache_time = current_time
-        bot.cached_embeds["bosses_overview"] = bosses_overview_embed
-        print("Preloaded bosses overview")
+        if bosses_overview_embed and isinstance(bosses_overview_embed, discord.Embed):
+            setattr(bosses_overview_embed, '_cache_time', current_time)
+            bot.cached_embeds["bosses_overview"] = bosses_overview_embed
+            print("Preloaded bosses overview")
     except Exception as e:
         print(f"Error preloading bosses overview: {str(e)}")
 
@@ -1388,9 +1402,10 @@ async def preload_categories(bot):
     for category in categories:
         try:
             embed = await bot.create_single_category_embed(category)
-            embed._cache_time = current_time
-            bot.cached_embeds[category] = embed
-            print(f"Preloaded {category} highscores")
+            if embed and isinstance(embed, discord.Embed):
+                setattr(embed, '_cache_time', current_time)
+                bot.cached_embeds[category] = embed
+                print(f"Preloaded {category} highscores")
             await asyncio.sleep(1)  # Small delay to prevent rate limiting
         except Exception as e:
             print(f"Error preloading {category}: {str(e)}")
