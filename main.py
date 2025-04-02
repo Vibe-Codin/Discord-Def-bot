@@ -52,7 +52,7 @@ async def fetch_clan_data():
                     return None
                 
                 # Now fetch the members stats
-                url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
+                url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/gained"
                 print(f"Fetching members data from: {url}")
                 async with session.get(url, headers=headers) as resp:
                     if resp.status != 200:
@@ -60,9 +60,16 @@ async def fetch_clan_data():
                         error_text = await resp.text()
                         print(f"Error response: {error_text}")
                         return None
-                    data = await resp.json()
-                    print(f"Successfully fetched data for {len(data)} members")
-                    return data
+                    try:
+                        data = await resp.json()
+                        if not data or 'players' not in data:
+                            print("Invalid data format received from API")
+                            return None
+                        print(f"Successfully fetched data for {len(data['players'])} members")
+                        return data['players']
+                    except Exception as e:
+                        print(f"Error parsing JSON response: {str(e)}")
+                        return None
     except Exception as e:
         print(f"Error fetching clan data: {str(e)}")
         return None
