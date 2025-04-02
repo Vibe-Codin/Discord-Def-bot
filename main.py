@@ -46,6 +46,7 @@ async def fetch_clan_data():
         group_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
         group_members_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/members"
         group_hiscores_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores"
+        group_details_endpoint = f"{WISE_OLD_MAN_BASE_URL}/groups/name/OSRS%20Defence"
         
         print(f"Fetching group details from: {group_endpoint}")
         print(f"Members endpoint: {group_members_endpoint}")
@@ -61,6 +62,18 @@ async def fetch_clan_data():
                 try:
                     group_data = response.json()
                     print(f"Group data: {json.dumps(group_data, indent=2)[:200]}...")
+                    
+                    # Extract members from group data if available
+                    if 'memberships' in group_data and group_data['memberships']:
+                        # Convert memberships to player list
+                        player_data = []
+                        for membership in group_data['memberships']:
+                            if 'player' in membership and isinstance(membership['player'], dict):
+                                player_data.append(membership['player'])
+                        
+                        if player_data:
+                            print(f"Extracted {len(player_data)} players from group data")
+                            return player_data
                     
                     # Get detailed player data from hiscores endpoint
                     hiscores_response = requests.get(group_hiscores_endpoint, headers=headers, timeout=15)
@@ -91,6 +104,26 @@ async def fetch_clan_data():
                         print(f"Failed to get members: {members_response.status_code}")
                         print(f"Response text: {members_response.text[:100] if members_response.text else 'Empty'}")
                     
+                    # Try to extract member usernames directly from the group data
+                    member_usernames = []
+                    if 'memberCount' in group_data and group_data['memberCount'] > 0:
+                        # If we have a clan chat name, add it as the first "member"
+                        if 'clanChat' in group_data and group_data['clanChat']:
+                            member_usernames.append(group_data['clanChat'].lower())
+                            
+                        # Try to find members mentioned in description
+                        if 'description' in group_data and group_data['description']:
+                            # Split by common separators and add as potential members
+                            words = group_data['description'].replace(',', ' ').replace('\n', ' ').split()
+                            for word in words:
+                                word = word.strip().lower()
+                                if word and len(word) >= 3 and ' ' not in word and word not in member_usernames:
+                                    member_usernames.append(word)
+                    
+                    if member_usernames:
+                        print(f"Extracted {len(member_usernames)} usernames from group data")
+                        return member_usernames
+                        
                     # If we got this far but couldn't get detailed player data, return the group data
                     # The build_messages function will handle extracting members from it
                     return group_data
@@ -100,6 +133,16 @@ async def fetch_clan_data():
             else:
                 print(f"Failed to get group details: {response.status_code}")
                 print(f"Response text: {response.text[:100] if response.text else 'Empty'}")
+                
+                # Try fetching by name as a fallback
+                name_response = requests.get(group_details_endpoint, headers=headers, timeout=15)
+                if name_response.status_code == 200 and name_response.text.strip():
+                    try:
+                        group_by_name = name_response.json()
+                        print(f"Successfully fetched group by name")
+                        return group_by_name
+                    except json.JSONDecodeError as e:
+                        print(f"Error decoding group by name JSON: {e}")
         except Exception as e:
             print(f"Error with direct request: {e}")
 
@@ -193,6 +236,32 @@ def build_messages(clan_data):
                 players.append(membership['player'])
         clan_data = players
         print(f"Extracted {len(players)} players from group data")
+    # If we received a list but not of player objects, it might be just usernames
+    elif isinstance(clan_data, list) and len(clan_data) > 0 and not isinstance(clan_data[0], dict):
+        # Convert simple username list to dummy player objects
+        players = []
+        for username in clan_data:
+            players.append({"username": username, "displayName": username})
+        clan_data = players
+        print(f"Converted {len(players)} usernames to dummy player objects")
+    # If we received a dict with simple clan structure, create dummy players from member names
+    elif isinstance(clan_data, dict) and 'name' in clan_data and not 'memberships' in clan_data:
+        clan_name = clan_data.get('name', 'Unknown')
+        clanChat = clan_data.get('clanChat', 'Unknown')
+        players = [
+            {"username": clan_name, "displayName": clan_name},
+            {"username": clanChat, "displayName": clanChat}
+        ]
+        # Extract member usernames from description if available
+        description = clan_data.get('description', '')
+        if description:
+            # Split description by commas, newlines or other separators
+            possible_members = [m.strip() for m in description.replace(',', ' ').replace('\n', ' ').split()]
+            for member in possible_members:
+                if member and len(member) > 2 and member not in [p["username"] for p in players]:
+                    players.append({"username": member, "displayName": member})
+        clan_data = players
+        print(f"Created {len(players)} dummy players from clan metadata")
 
     # Filter out users with offensive combat stats > 2
     filtered = []
