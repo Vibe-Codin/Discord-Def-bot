@@ -70,28 +70,27 @@ class HighscoresBot(discord.Client):
                 total_level = 0
                 total_exp = 0
                 
-                # Check for skills data to calculate total level
+                # Calculate total level by summing individual skill levels
+                # We'll ignore the 'overall' total level as it seems to be fixed at 2277
                 if 'data' in entry and 'skills' in entry['data']:
                     skills_data = entry['data']['skills']
                     
-                    # Try to get total level from the 'overall' skill if available
-                    if 'overall' in skills_data and 'level' in skills_data['overall']:
-                        total_level = skills_data['overall']['level']
-                        total_exp = skills_data['overall'].get('experience', 0)
-                    else:
-                        # Calculate total level manually from each skill
-                        skill_levels = []
-                        for skill, data in skills_data.items():
-                            if skill != 'overall' and 'level' in data:
-                                skill_levels.append(data['level'])
-                                total_exp += data.get('experience', 0)
-                        
-                        total_level = sum(skill_levels) if skill_levels else 0
+                    # Sum individual skill levels (excluding 'overall')
+                    skill_levels = []
+                    for skill, data in skills_data.items():
+                        if skill != 'overall' and 'level' in data:
+                            skill_levels.append(data['level'])
+                            total_exp += data.get('experience', 0)
+                    
+                    total_level = sum(skill_levels) if skill_levels else 0
+                    
+                    # If we also have 'overall' experience data, use that as it's more accurate
+                    if 'overall' in skills_data and 'experience' in skills_data['overall']:
+                        total_exp = skills_data['overall'].get('experience', total_exp)
                 
-                # Fallback to overall data if available and skills data wasn't
-                if total_level == 0 and 'data' in entry:
-                    total_level = entry['data'].get('level', 0)
-                    total_exp = entry['data'].get('experience', 0)
+                # Fallback to player total exp if available
+                if total_exp == 0 and 'player' in entry and 'exp' in entry['player']:
+                    total_exp = entry['player']['exp']
                 
                 top_10_text += f"{i}. {player_name} | Lvl: {total_level} | XP: {total_exp:,}\n"
             
