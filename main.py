@@ -32,7 +32,7 @@ highscore_messages = {
 }
 
 async def fetch_clan_data():
-    """Fetch clan hiscores data from Wise Old Man API"""
+    """Fetch clan hiscores data from Wise Old Man API with rate limit handling"""
     print(f"Fetching clan data for clan ID: {CLAN_ID}")
 
     headers = {
@@ -40,11 +40,11 @@ async def fetch_clan_data():
         'User-Agent': 'OSRS-Clan-Discord-Bot/1.0'
     }
 
-    # Main endpoint to get hiscores data - adding 'overall' as the default metric
+    # Main endpoint to get hiscores data
     hiscores_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores?metric=overall"
 
     try:
-        print(f"Requesting hiscores from: {hiscores_url}")
+        print(f"Requesting data from: {hiscores_url}")
         async with aiohttp.ClientSession() as session:
             # First get the members list from the group details
             group_details_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
@@ -67,27 +67,89 @@ async def fetch_clan_data():
 
                 print(f"Found {len(member_usernames)} members in the clan")
 
-                # Fetch player details for each member
+                # Fetch player details for each member with rate limit handling
                 player_data = []
-                for username in member_usernames:
-                    player_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
-                    async with session.get(player_url, headers=headers) as player_response:
-                        if player_response.status == 200:
-                            player = await player_response.json()
-                            player_data.append(player)
+                rate_limited_count = 0
+                
+                # Instead of fetching all players individually, try to fetch top players for each metric
+                # This is more efficient than fetching each player separately
+                try:
+                    # Get overall hiscores for the clan directly
+                    hiscores_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores?metric=overall&limit=200"
+                    async with session.get(hiscores_url, headers=headers) as hiscores_response:
+                        if hiscores_response.status == 200:
+                            hiscores_data = await hiscores_response.json()
+                            
+                            # Extract player data from hiscores
+                            for entry in hiscores_data:
+                                if 'player' in entry:
+                                    player_data.append(entry['player'])
+                                    
+                            if len(player_data) > 0:
+                                print(f"Successfully fetched hiscores data for {len(player_data)} players")
+                                return player_data
                         else:
-                            print(f"Failed to fetch data for player {username}: {player_response.status}")
+                            print(f"Failed to fetch hiscores data: {hiscores_response.status}")
+                except Exception as hiscores_error:
+                    print(f"Error fetching hiscores: {hiscores_error}")
+                
+                # Fallback to individual player fetching if the above method fails
+                # Use a delay between requests to avoid rate limiting
+                import asyncio
+                
+                # Only fetch the first 50 players to avoid rate limits
+                limited_members = member_usernames[:50]
+                for username in limited_members:
+                    # Add delay between requests to avoid rate limiting
+                    await asyncio.sleep(0.5)
+                    
+                    player_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
+                    try:
+                        async with session.get(player_url, headers=headers) as player_response:
+                            if player_response.status == 200:
+                                player = await player_response.json()
+                                player_data.append(player)
+                            elif player_response.status == 429:  # Rate limited
+                                rate_limited_count += 1
+                                # If we hit too many rate limits, just use what we have
+                                if rate_limited_count > 10:
+                                    print(f"Too many rate limits, using {len(player_data)} players we have so far")
+                                    break
+                            else:
+                                print(f"Failed to fetch data for player {username}: {player_response.status}")
+                    except Exception as player_error:
+                        print(f"Error fetching player {username}: {player_error}")
 
                 print(f"Successfully fetched data for {len(player_data)} players")
                 if len(player_data) > 0:
                     print(f"Sample player data: {json.dumps(player_data[0], indent=2)[:200]}...")
-                return player_data
+                    return player_data
+                return None
+                
     except Exception as e:
         print(f"Error fetching clan data: {e}")
 
         # Fallback to requests if aiohttp fails
         try:
             print("Falling back to requests library")
+            # Try to get hiscores directly first
+            hiscores_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}/hiscores?metric=overall&limit=100"
+            hiscores_response = requests.get(hiscores_url, headers=headers, timeout=15)
+            
+            if hiscores_response.status_code == 200:
+                hiscores_data = hiscores_response.json()
+                player_data = []
+                
+                # Extract player data from hiscores
+                for entry in hiscores_data:
+                    if 'player' in entry:
+                        player_data.append(entry['player'])
+                        
+                if len(player_data) > 0:
+                    print(f"Fallback: Successfully fetched hiscores data for {len(player_data)} players")
+                    return player_data
+            
+            # If direct hiscores didn't work, try the group members approach
             group_details_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
             group_response = requests.get(group_details_url, headers=headers, timeout=15)
 
@@ -106,14 +168,24 @@ async def fetch_clan_data():
                                 for membership in group_data.get('memberships', [])
                                 if membership.get('player', {}).get('username')]
 
-            # Fetch player details for each member
+            # Fetch a limited number of player details to avoid rate limits
             player_data = []
-            for username in member_usernames:
+            import time
+            
+            # Only fetch the first 30 players to avoid rate limits
+            limited_members = member_usernames[:30]
+            for username in limited_members:
+                # Add delay between requests
+                time.sleep(0.5)
+                
                 player_url = f"{WISE_OLD_MAN_BASE_URL}/players/{username}"
                 player_response = requests.get(player_url, headers=headers, timeout=15)
                 if player_response.status_code == 200:
                     player = player_response.json()
                     player_data.append(player)
+                elif player_response.status_code == 429:  # Rate limited
+                    # If we're rate limited, just use what we have
+                    break
 
             print(f"Fallback: Successfully fetched data for {len(player_data)} players")
             return player_data
@@ -270,6 +342,9 @@ class RefreshButton(discord.ui.View):
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         try:
+            # First give immediate feedback
+            await interaction.followup.send("Refreshing highscores... this may take a moment.", ephemeral=True)
+            
             clan_data = await fetch_clan_data()
             if not clan_data:
                 await interaction.followup.send("Error fetching clan data. Please try again later.", ephemeral=True)
@@ -280,13 +355,26 @@ class RefreshButton(discord.ui.View):
             # Update the message with new data
             message = highscore_messages.get("main")
             if message:
-                await message.edit(embed=embed, view=RefreshButton(self.bot))
-                await interaction.followup.send("Highscores refreshed!", ephemeral=True)
+                try:
+                    await message.edit(embed=embed, view=RefreshButton(self.bot))
+                    # Use a new message to indicate success since the original might have expired
+                    try:
+                        await interaction.followup.send("✅ Highscores have been updated successfully!", ephemeral=True)
+                    except discord.errors.NotFound:
+                        # If the original interaction expired, we can't send a followup
+                        pass
+                except Exception as edit_error:
+                    print(f"Error editing message: {edit_error}")
+                    await interaction.channel.send("⚠️ Could not update the existing message. Here's a new highscores table:", embed=embed, view=RefreshButton(self.bot))
             else:
-                await interaction.followup.send("Couldn't find the highscores message to update.", ephemeral=True)
+                await interaction.channel.send("Here's the latest highscores data:", embed=embed, view=RefreshButton(self.bot))
         except Exception as e:
             print(f"Error refreshing highscores: {e}")
-            await interaction.followup.send(f"An error occurred while refreshing highscores: {str(e)}", ephemeral=True)
+            try:
+                await interaction.followup.send(f"An error occurred while refreshing highscores: {str(e)}", ephemeral=True)
+            except discord.errors.NotFound:
+                # If the original interaction expired, we can't send a followup
+                pass
 
 def create_highscores_embed(clan_data):
     """Create a Discord embed with the clan highscores"""
