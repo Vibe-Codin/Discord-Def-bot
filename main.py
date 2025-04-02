@@ -215,12 +215,14 @@ async def testapi(interaction: discord.Interaction):
     try:
         headers = {
             'Accept': 'application/json',
-            'User-Agent': 'Discord-Bot/1.0',
-            'Content-Type': 'application/json'
+            'User-Agent': 'OSRSDefenceBot/1.0',
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
         }
         async with aiohttp.ClientSession() as session:
             # Test group endpoint
-            group_url = f"{WISE_OLD_MAN_BASE_URL}/groups/{CLAN_ID}"
+            group_url = f"{WISE_OLD_MAN_BASE_URL}/groups/name/osrs-defence"
             async with session.get(group_url, headers=headers) as resp:
                 group_text = await resp.text()
                 group_headers = dict(resp.headers)
