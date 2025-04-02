@@ -1314,7 +1314,7 @@ client = HighscoresBot(intents=intents)
 
 @client.event
 async def on_ready():
-    print(f'{self.user} has connected to Discord!')
+    print(f'{client.user} has connected to Discord!')
 
     # Set up slash commands
     @client.tree.command(name="clanhighscores", description="Display the clan highscores")
