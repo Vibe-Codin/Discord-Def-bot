@@ -26,7 +26,7 @@ class HighscoresView(View):
         # Add the Skills button
         skills_button = discord.ui.Button(
             style=discord.ButtonStyle.primary if active_category == "skills" else discord.ButtonStyle.secondary,
-            label="Skills",
+            label="Skills" if not is_loading else "Loading...",
             custom_id="skills_button",
             disabled=is_loading
         )
@@ -36,7 +36,7 @@ class HighscoresView(View):
         # Add the Bosses button
         bosses_button = discord.ui.Button(
             style=discord.ButtonStyle.primary if active_category == "bosses" else discord.ButtonStyle.secondary,
-            label="Bosses",
+            label="Bosses" if not is_loading else "Loading...",
             custom_id="bosses_button",
             disabled=is_loading
         )
@@ -51,9 +51,12 @@ class HighscoresView(View):
 
     async def skills_button_callback(self, interaction):
         try:
-            # Show a loading message to the user who clicked
-            await interaction.response.send_message("Switching to Skills category... Please wait.", ephemeral=True)
-
+            # Acknowledge the interaction immediately to prevent timeout
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
+            # Show updated thinking message
+            await interaction.followup.send("Switching to Skills category... Please wait.", ephemeral=True)
+            
             # Create a new view with skills as active category and loading state enabled
             loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=True)
             
@@ -62,51 +65,73 @@ class HighscoresView(View):
                 await interaction.message.edit(view=loading_view)
             except Exception as e:
                 print(f"Error setting loading state: {str(e)}")
-
+            
             # Always use cached embed if available, otherwise create a new one
-            if "total" in self.cached_embeds:
-                embed = self.cached_embeds["total"]
-                # Update the timestamp to show it's current
-                embed.timestamp = datetime.now()
-            else:
-                embed = await self.bot.update_highscores(view_type="total")
-                if isinstance(embed, discord.Embed):
+            try:
+                if "total" in self.cached_embeds:
+                    embed = self.cached_embeds["total"]
+                    # Update the timestamp to show it's current
                     embed.timestamp = datetime.now()
-                    self.cached_embeds["total"] = embed
+                else:
+                    embed = await self.bot.update_highscores(view_type="total")
+                    if isinstance(embed, discord.Embed):
+                        embed.timestamp = datetime.now()
+                        self.cached_embeds["total"] = embed
+                        # Store cache time for this embed
+                        if not hasattr(self.bot, 'cache_times'):
+                            self.bot.cache_times = {}
+                        self.bot.cache_times["total"] = time.time()
+            except Exception as e:
+                print(f"Error getting embed: {str(e)}")
+                await interaction.edit_original_response(content="❌ Error fetching data. Please try again.")
+                return
 
             # Create a new view with loading state disabled
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=False)
 
+            success = False
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
-                await interaction.edit_original_response(content="✅ Switched to Skills category")
+                success = True
             except discord.errors.HTTPException as e:
                 print(f"Error editing message in skills button: {str(e)}")
                 try:
-                    await interaction.message.channel.send(embed=embed, view=new_view)
-                    await interaction.edit_original_response(content="✅ Created new Skills embed (couldn't update existing message)")
+                    new_message = await interaction.message.channel.send(embed=embed, view=new_view)
+                    self.bot.last_message = new_message
+                    success = True
                 except Exception as e2:
                     print(f"Error sending new message: {str(e2)}")
-                    await interaction.edit_original_response(content="❌ Failed to update or create Skills embed")
+            
+            if success:
+                await interaction.edit_original_response(content="✅ Switched to Skills category")
+            else:
+                await interaction.edit_original_response(content="❌ Failed to update or create Skills embed")
         except Exception as e:
             print(f"Error in skills_button_callback: {str(e)}")
             try:
-                await interaction.edit_original_response(content="❌ An error occurred while processing your request")
+                # If the interaction hasn't been responded to yet
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ An error occurred while processing your request", ephemeral=True)
+                else:
+                    await interaction.edit_original_response(content="❌ An error occurred while processing your request")
             except:
                 print("Could not update error message")
 
     async def bosses_button_callback(self, interaction):
         try:
+            # Acknowledge the interaction immediately to prevent timeout
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
             # Check if we already have the bosses overview embed cached
             bosses_overview_key = "bosses_overview"
             using_cached = bosses_overview_key in self.cached_embeds
-
-            # Show appropriate loading message
+            
+            # Show updated thinking message
             if using_cached:
-                await interaction.response.send_message("Switching to Bosses category... (using cached data)", ephemeral=True)
+                await interaction.followup.send("Switching to Bosses category... (using cached data)", ephemeral=True)
             else:
-                await interaction.response.send_message("Switching to Bosses category... Please wait while loading data.", ephemeral=True)
-
+                await interaction.followup.send("Switching to Bosses category... Please wait while loading data.", ephemeral=True)
+            
             # Create a new view with bosses as active category but in loading state
             try:
                 loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=True)
@@ -120,7 +145,7 @@ class HighscoresView(View):
                 print(f"Error creating bosses loading view: {str(view_error)}")
                 await interaction.edit_original_response(content=f"❌ Error creating bosses view: {str(view_error)}")
                 return
-
+            
             # Get a generic bosses overview embed or create one
             try:
                 if using_cached:
@@ -135,18 +160,20 @@ class HighscoresView(View):
                         embed.timestamp = datetime.now()
                         self.cached_embeds[bosses_overview_key] = embed
                         # Store cache time for this embed
+                        if not hasattr(self.bot, 'cache_times'):
+                            self.bot.cache_times = {}
                         self.bot.cache_times[bosses_overview_key] = time.time()
             except Exception as embed_error:
                 print(f"Error creating bosses overview embed: {str(embed_error)}")
                 await interaction.edit_original_response(content=f"❌ Error creating bosses overview: {str(embed_error)}")
                 return
-
+            
             # Create the final view with loading state disabled
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=False)
             
             success = False
             error_message = None
-
+            
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
                 success = True
@@ -155,13 +182,13 @@ class HighscoresView(View):
                 print(f"Error editing message in bosses button: {error_message}")
                 # Try to send a new message instead
                 try:
-                    await interaction.message.channel.send(embed=embed, view=new_view)
+                    new_message = await interaction.message.channel.send(embed=embed, view=new_view)
+                    self.bot.last_message = new_message
                     success = True
-                    await interaction.edit_original_response(content="✅ Created new Bosses embed (couldn't update existing message)")
                 except Exception as e2:
                     error_message = str(e2)
                     print(f"Error sending new message: {error_message}")
-
+            
             if success:
                 if using_cached:
                     # Get cache age
@@ -180,7 +207,11 @@ class HighscoresView(View):
             error_msg = str(e)
             print(f"Error in bosses_button_callback: {error_msg}")
             try:
-                await interaction.edit_original_response(content=f"❌ An error occurred: {error_msg}")
+                # If the interaction hasn't been responded to yet
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ An error occurred: {error_msg}", ephemeral=True)
+                else:
+                    await interaction.edit_original_response(content=f"❌ An error occurred: {error_msg}")
             except:
                 print("Could not update error message")
 
@@ -227,9 +258,12 @@ class SkillsDropdown(discord.ui.Select):
 
     async def callback(self, interaction):
         try:
-            # Show a loading message to the user who clicked
-            await interaction.response.send_message("Loading skill data... Please wait.", ephemeral=True)
-
+            # Acknowledge the interaction immediately to prevent timeout
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
+            # Show updated thinking message
+            await interaction.followup.send("Loading skill data... Please wait.", ephemeral=True)
+            
             selected_value = self.values[0]
             current_time = time.time()
             
@@ -239,36 +273,53 @@ class SkillsDropdown(discord.ui.Select):
                 await interaction.message.edit(view=loading_view)
             except Exception as e:
                 print(f"Error setting loading state: {str(e)}")
-
+            
             # Check if we have a cached embed
             cached_entry = self.cached_embeds.get(selected_value, None)
             cache_age = 0
-
-            if cached_entry and hasattr(self.bot, 'cache_times') and selected_value in self.bot.cache_times:
+            
+            if not hasattr(self.bot, 'cache_times'):
+                self.bot.cache_times = {}
+                
+            if cached_entry and selected_value in self.bot.cache_times:
                 cache_age = current_time - self.bot.cache_times[selected_value]
-
-            if cached_entry:
-                embed = cached_entry
-                # Update the timestamp
-                embed.timestamp = datetime.now()
-                print(f"Using cached embed for {selected_value}")
-            elif selected_value == "total":
-                embed = await self.bot.update_highscores(view_type="total")
-                if isinstance(embed, discord.Embed):
-                    # Set a proper discord.py timestamp
+            
+            try:
+                if cached_entry:
+                    embed = cached_entry
+                    # Update the timestamp
                     embed.timestamp = datetime.now()
-                    self.cached_embeds["total"] = embed
-            else:
-                # For specific skill
-                embed = await self.bot.create_single_category_embed(selected_value)
-                if isinstance(embed, discord.Embed):
-                    # Set a proper discord.py timestamp
-                    embed.timestamp = datetime.now()
-                    self.cached_embeds[selected_value] = embed
-
+                    print(f"Using cached embed for {selected_value}")
+                elif selected_value == "total":
+                    embed = await self.bot.update_highscores(view_type="total")
+                    if isinstance(embed, discord.Embed):
+                        # Set a proper discord.py timestamp
+                        embed.timestamp = datetime.now()
+                        self.cached_embeds["total"] = embed
+                        self.bot.cache_times["total"] = time.time()
+                else:
+                    # For specific skill
+                    embed = await self.bot.create_single_category_embed(selected_value)
+                    if isinstance(embed, discord.Embed):
+                        # Set a proper discord.py timestamp
+                        embed.timestamp = datetime.now()
+                        self.cached_embeds[selected_value] = embed
+                        self.bot.cache_times[selected_value] = time.time()
+            except Exception as e:
+                print(f"Error getting embed for {selected_value}: {str(e)}")
+                await interaction.edit_original_response(content=f"❌ Error loading {selected_value} data: {str(e)}")
+                
+                # Reset the view to non-loading state even when there's an error
+                try:
+                    reset_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=False)
+                    await interaction.message.edit(view=reset_view)
+                except:
+                    pass
+                return
+            
             # Create a new HighscoresView with cached embeds to replace the existing view (without loading state)
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=False)
-
+            
             edited = False
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
@@ -277,11 +328,12 @@ class SkillsDropdown(discord.ui.Select):
                 print(f"Error editing message: {str(e)}")
                 # If edit fails, try to send a new message
                 try:
-                    await interaction.message.channel.send(embed=embed, view=new_view)
+                    new_message = await interaction.message.channel.send(embed=embed, view=new_view)
+                    self.bot.last_message = new_message
                     edited = True
                 except Exception as e2:
                     print(f"Error sending new message: {str(e2)}")
-
+            
             # Only send followup if we successfully edited the message
             if edited:
                 # Update the "please wait" message instead of sending a new one
@@ -296,13 +348,17 @@ class SkillsDropdown(discord.ui.Select):
                     print(f"Error updating original response: {str(e)}")
             else:
                 await interaction.edit_original_response(content="❌ Failed to update the highscores display")
-
+                
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0] if hasattr(self, 'values') and self.values else 'unknown'}")
         except Exception as e:
             print(f"Error in skills dropdown callback: {str(e)}")
             try:
-                await interaction.edit_original_response(content=f"❌ An error occurred: {str(e)}")
+                # If the interaction hasn't been responded to yet
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
+                else:
+                    await interaction.edit_original_response(content=f"❌ An error occurred: {str(e)}")
             except:
                 print("Could not update error message")
 
@@ -380,9 +436,12 @@ class BossesDropdown(discord.ui.Select):
 
     async def callback(self, interaction):
         try:
-            # Show a loading message to the user who clicked
-            await interaction.response.send_message("Loading boss data... Please wait.", ephemeral=True)
-
+            # Acknowledge the interaction immediately to prevent timeout
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
+            # Show updated thinking message
+            await interaction.followup.send("Loading boss data... Please wait.", ephemeral=True)
+            
             selected_value = self.values[0]
             current_time = time.time()
             
@@ -392,15 +451,15 @@ class BossesDropdown(discord.ui.Select):
                 await interaction.message.edit(view=loading_view)
             except Exception as e:
                 print(f"Error setting loading state: {str(e)}")
-
+            
             # Check if we have a cached embed and if it's still valid (less than 24 hours old)
             cached_entry = self.cached_embeds.get(selected_value, None)
             cache_age = 0
-
+            
             # Store cache time in a separate dictionary to avoid attribute issues
             if not hasattr(self.bot, 'cache_times'):
                 self.bot.cache_times = {}
-
+            
             try:
                 if cached_entry and selected_value in self.bot.cache_times:
                     cache_age = current_time - self.bot.cache_times[selected_value]
@@ -424,11 +483,18 @@ class BossesDropdown(discord.ui.Select):
             except Exception as embed_error:
                 print(f"Error creating embed for {selected_value}: {str(embed_error)}")
                 await interaction.edit_original_response(content=f"❌ Error creating {selected_value} highscores: {str(embed_error)}")
+                
+                # Reset the view to non-loading state even when there's an error
+                try:
+                    reset_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=False)
+                    await interaction.message.edit(view=reset_view)
+                except:
+                    pass
                 return
-
+            
             # Create a new HighscoresView with cached embeds to replace the existing view (with loading state disabled)
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=False)
-
+            
             edited = False
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
@@ -437,11 +503,12 @@ class BossesDropdown(discord.ui.Select):
                 print(f"Error editing message: {str(e)}")
                 # If edit fails, try to send a new message
                 try:
-                    await interaction.message.channel.send(embed=embed, view=new_view)
+                    new_message = await interaction.message.channel.send(embed=embed, view=new_view)
+                    self.bot.last_message = new_message
                     edited = True
                 except Exception as e2:
                     print(f"Error sending new message: {str(e2)}")
-
+            
             # Only send followup if we successfully edited the message
             if edited:
                 # Update the "please wait" message instead of sending a new one
@@ -456,13 +523,17 @@ class BossesDropdown(discord.ui.Select):
                     print(f"Error updating original response: {str(e)}")
             else:
                 await interaction.edit_original_response(content="❌ Failed to update the highscores display")
-
+                
         except discord_errors.NotFound:
             print(f"Interaction expired for {self.values[0] if hasattr(self, 'values') and self.values else 'unknown'}")
         except Exception as e:
             print(f"Error in bosses dropdown callback: {str(e)}")
             try:
-                await interaction.edit_original_response(content=f"❌ An error occurred: {str(e)}")
+                # If the interaction hasn't been responded to yet
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
+                else:
+                    await interaction.edit_original_response(content=f"❌ An error occurred: {str(e)}")
             except:
                 print(f"Could not update error message")
 
@@ -1634,6 +1705,18 @@ async def on_ready():
                         # Start the background processing task immediately
                         loading_message = await channel.send("Creating new highscores embed... please wait...")
 
+                        # Show loading state in the UI
+                        loading_view = HighscoresView(client, client.cached_embeds, active_category="skills", is_loading=True)
+                        try:
+                            temp_embed = discord.Embed(
+                                title="Loading data...",
+                                description="Please wait while the highscores data is being loaded.",
+                                color=0x3498db
+                            )
+                            await loading_message.edit(content=None, embed=temp_embed, view=loading_view)
+                        except Exception as e:
+                            print(f"Error setting initial loading state: {str(e)}")
+
                         # Get embed from cache or create a new one
                         if "total" in client.cached_embeds:
                             embed = client.cached_embeds["total"]
@@ -1644,28 +1727,40 @@ async def on_ready():
                             embed = await client.update_highscores(force_refresh=False)
 
                         if isinstance(embed, discord.Embed):
-                            # Create a new view with cached embeds
-                            view = HighscoresView(client, client.cached_embeds, active_category="skills")
+                            # Create a new view with cached embeds (not in loading state)
+                            view = HighscoresView(client, client.cached_embeds, active_category="skills", is_loading=False)
                             
                             # Edit the loading message
                             try:
                                 await loading_message.edit(content=None, embed=embed, view=view)
                                 client.last_message = loading_message
+                                # Update the followup message
+                                await interaction.edit_original_response(content="✅ Successfully created new highscores embed")
                             except discord.errors.HTTPException as http_err:
                                 print(f"HTTP error when editing message: {str(http_err)}")
                                 # If edit fails, send a new message
                                 new_message = await channel.send(embed=embed, view=view)
                                 client.last_message = new_message
-                                await loading_message.delete()
+                                try:
+                                    await loading_message.delete()
+                                except:
+                                    pass
+                                # Update the followup message
+                                await interaction.edit_original_response(content="✅ Created new highscores embed (in a new message)")
                         else:
                             # If we got an error string back
                             error_message = "Error creating highscores embed"
                             if isinstance(embed, str):
                                 error_message = embed
                             await loading_message.edit(content=f"⚠️ {error_message}")
+                            await interaction.edit_original_response(content=f"❌ Error: {error_message}")
                     except Exception as e:
                         print(f"Error in /new command execution: {str(e)}")
-                        await channel.send(f"Error creating new highscores embed: {str(e)}")
+                        try:
+                            await channel.send(f"Error creating new highscores embed: {str(e)}")
+                            await interaction.edit_original_response(content=f"❌ Error: {str(e)}")
+                        except:
+                            print("Could not send error message to channel")
                 except Exception as outer_e:
                     error_message = str(outer_e)
                     print(f"Critical error in /new command: {error_message}")
@@ -1698,7 +1793,19 @@ async def on_ready():
                             try:
                                 # Create a loading message
                                 loading_message = await channel.send("Refreshing highscores data... please wait...")
-
+                                
+                                # Show loading state immediately
+                                loading_view = HighscoresView(client, client.cached_embeds, active_category="skills", is_loading=True)
+                                try:
+                                    temp_embed = discord.Embed(
+                                        title="Refreshing cache...",
+                                        description="Please wait while the highscores data is being refreshed from the API.",
+                                        color=0x3498db
+                                    )
+                                    await loading_message.edit(content=None, embed=temp_embed, view=loading_view)
+                                except Exception as e:
+                                    print(f"Error setting initial loading state: {str(e)}")
+                                
                                 # Force refresh the cache
                                 embed = await client.update_highscores(force_refresh=True)
 
@@ -1706,24 +1813,42 @@ async def on_ready():
                                 if isinstance(embed, discord.Embed):
                                     embed.timestamp = datetime.now()
 
-                                    # Create view with buttons
-                                    view = HighscoresView(client, client.cached_embeds)
+                                    # Create view with buttons (not in loading state)
+                                    view = HighscoresView(client, client.cached_embeds, active_category="skills", is_loading=False)
 
                                     # Edit loading message with the new embed or send new message if edit fails
                                     try:
                                         await loading_message.edit(content=None, embed=embed, view=view)
                                         client.last_message = loading_message
-                                    except Exception:
-                                        new_message = await channel.send(embed=embed, view=view)
-                                        client.last_message = new_message
-                                        await loading_message.delete()
+                                        try:
+                                            # Update the original interaction response
+                                            await interaction.edit_original_response(content="✅ Cache refreshed and new embed created successfully!")
+                                        except:
+                                            print("Could not update original response")
+                                    except Exception as edit_error:
+                                        print(f"Error editing message: {str(edit_error)}")
+                                        try:
+                                            new_message = await channel.send(embed=embed, view=view)
+                                            client.last_message = new_message
+                                            await loading_message.delete()
+                                            # Update the original interaction response
+                                            await interaction.edit_original_response(content="✅ Cache refreshed and new embed created in a new message!")
+                                        except Exception as send_error:
+                                            print(f"Error sending new message: {str(send_error)}")
+                                            await interaction.edit_original_response(content=f"❌ Error updating message: {str(send_error)}")
                                 else:
                                     # If we got an error string back
-                                    await loading_message.edit(content=f"Error refreshing cache: {embed}")
+                                    error_message = str(embed) if isinstance(embed, str) else "Unknown error"
+                                    await loading_message.edit(content=f"Error refreshing cache: {error_message}")
+                                    try:
+                                        await interaction.edit_original_response(content=f"❌ Error refreshing cache: {error_message}")
+                                    except:
+                                        print("Could not update original response with error")
                             except Exception as e:
                                 print(f"Error in background refresh: {str(e)}")
                                 try:
                                     await channel.send(f"Error refreshing highscores: {str(e)}")
+                                    await interaction.edit_original_response(content=f"❌ Error refreshing cache: {str(e)}")
                                 except:
                                     print(f"Could not send error message to channel")
 
