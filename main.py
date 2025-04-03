@@ -16,17 +16,19 @@ logger = logging.getLogger(__name__)
 
 # Custom View for Highscores dropdown menu
 class HighscoresView(View):
-    def __init__(self, bot, cached_embeds=None, active_category="skills"):
+    def __init__(self, bot, cached_embeds=None, active_category="skills", is_loading=False):
         super().__init__(timeout=None)  # No timeout for the view
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
         self.active_category = active_category
+        self.is_loading = is_loading
 
         # Add the Skills button
         skills_button = discord.ui.Button(
             style=discord.ButtonStyle.primary if active_category == "skills" else discord.ButtonStyle.secondary,
             label="Skills",
-            custom_id="skills_button"
+            custom_id="skills_button",
+            disabled=is_loading
         )
         skills_button.callback = self.skills_button_callback
         self.add_item(skills_button)
@@ -35,24 +37,31 @@ class HighscoresView(View):
         bosses_button = discord.ui.Button(
             style=discord.ButtonStyle.primary if active_category == "bosses" else discord.ButtonStyle.secondary,
             label="Bosses",
-            custom_id="bosses_button"
+            custom_id="bosses_button",
+            disabled=is_loading
         )
         bosses_button.callback = self.bosses_button_callback
         self.add_item(bosses_button)
 
         # Add the appropriate dropdown based on active category
         if active_category == "skills":
-            self.add_item(SkillsDropdown(self.bot, self.cached_embeds))
+            self.add_item(SkillsDropdown(self.bot, self.cached_embeds, is_loading))
         else:
-            self.add_item(BossesDropdown(self.bot, self.cached_embeds))
+            self.add_item(BossesDropdown(self.bot, self.cached_embeds, is_loading))
 
     async def skills_button_callback(self, interaction):
         try:
             # Show a loading message to the user who clicked
             await interaction.response.send_message("Switching to Skills category... Please wait.", ephemeral=True)
 
-            # Create a new view with skills as active category
-            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
+            # Create a new view with skills as active category and loading state enabled
+            loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=True)
+            
+            # Update the message to show loading state first
+            try:
+                await interaction.message.edit(view=loading_view)
+            except Exception as e:
+                print(f"Error setting loading state: {str(e)}")
 
             # Always use cached embed if available, otherwise create a new one
             if "total" in self.cached_embeds:
@@ -64,6 +73,9 @@ class HighscoresView(View):
                 if isinstance(embed, discord.Embed):
                     embed.timestamp = datetime.now()
                     self.cached_embeds["total"] = embed
+
+            # Create a new view with loading state disabled
+            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=False)
 
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
@@ -95,11 +107,17 @@ class HighscoresView(View):
             else:
                 await interaction.response.send_message("Switching to Bosses category... Please wait while loading data.", ephemeral=True)
 
-            # Create a new view with bosses as active category immediately
+            # Create a new view with bosses as active category but in loading state
             try:
-                new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
+                loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=True)
+                
+                # Update the message to show loading state first
+                try:
+                    await interaction.message.edit(view=loading_view)
+                except Exception as e:
+                    print(f"Error setting loading state: {str(e)}")
             except Exception as view_error:
-                print(f"Error creating bosses view: {str(view_error)}")
+                print(f"Error creating bosses loading view: {str(view_error)}")
                 await interaction.edit_original_response(content=f"❌ Error creating bosses view: {str(view_error)}")
                 return
 
@@ -123,6 +141,9 @@ class HighscoresView(View):
                 await interaction.edit_original_response(content=f"❌ Error creating bosses overview: {str(embed_error)}")
                 return
 
+            # Create the final view with loading state disabled
+            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=False)
+            
             success = False
             error_message = None
 
@@ -165,7 +186,7 @@ class HighscoresView(View):
 
 # Dropdown menu for highscores selection
 class SkillsDropdown(discord.ui.Select):
-    def __init__(self, bot, cached_embeds=None):
+    def __init__(self, bot, cached_embeds=None, is_loading=False):
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
 
@@ -193,7 +214,16 @@ class SkillsDropdown(discord.ui.Select):
             discord.SelectOption(label="Construction", value="construction", description="Construction skill highscores"),
         ]
 
-        super().__init__(placeholder="Select a skill category...", min_values=1, max_values=1, options=options)
+        # Set placeholder text to indicate loading state if needed
+        placeholder = "Loading skills..." if is_loading else "Select a skill category..."
+        
+        super().__init__(
+            placeholder=placeholder, 
+            min_values=1, 
+            max_values=1, 
+            options=options,
+            disabled=is_loading
+        )
 
     async def callback(self, interaction):
         try:
@@ -202,6 +232,13 @@ class SkillsDropdown(discord.ui.Select):
 
             selected_value = self.values[0]
             current_time = time.time()
+            
+            # First set the loading state on the UI
+            loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=True)
+            try:
+                await interaction.message.edit(view=loading_view)
+            except Exception as e:
+                print(f"Error setting loading state: {str(e)}")
 
             # Check if we have a cached embed
             cached_entry = self.cached_embeds.get(selected_value, None)
@@ -229,8 +266,8 @@ class SkillsDropdown(discord.ui.Select):
                     embed.timestamp = datetime.now()
                     self.cached_embeds[selected_value] = embed
 
-            # Create a new HighscoresView with cached embeds to replace the existing view
-            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills")
+            # Create a new HighscoresView with cached embeds to replace the existing view (without loading state)
+            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=False)
 
             edited = False
             try:
@@ -290,7 +327,7 @@ class SkillsDropdown(discord.ui.Select):
                 print(f"Could not send error followup")
 
 class BossesDropdown(discord.ui.Select):
-    def __init__(self, bot, cached_embeds=None):
+    def __init__(self, bot, cached_embeds=None, is_loading=False):
         self.bot = bot
         self.cached_embeds = cached_embeds or {}
 
@@ -330,7 +367,16 @@ class BossesDropdown(discord.ui.Select):
             print(f"Warning: Dropdown has {len(options)} options, limiting to 25")
             options = options[:25]
 
-        super().__init__(placeholder="Select a boss category...", min_values=1, max_values=1, options=options)
+        # Set placeholder text to indicate loading state if needed
+        placeholder = "Loading bosses..." if is_loading else "Select a boss category..."
+        
+        super().__init__(
+            placeholder=placeholder, 
+            min_values=1, 
+            max_values=1, 
+            options=options, 
+            disabled=is_loading
+        )
 
     async def callback(self, interaction):
         try:
@@ -339,6 +385,13 @@ class BossesDropdown(discord.ui.Select):
 
             selected_value = self.values[0]
             current_time = time.time()
+            
+            # First set the loading state on the UI
+            loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=True)
+            try:
+                await interaction.message.edit(view=loading_view)
+            except Exception as e:
+                print(f"Error setting loading state: {str(e)}")
 
             # Check if we have a cached embed and if it's still valid (less than 24 hours old)
             cached_entry = self.cached_embeds.get(selected_value, None)
@@ -373,8 +426,8 @@ class BossesDropdown(discord.ui.Select):
                 await interaction.edit_original_response(content=f"❌ Error creating {selected_value} highscores: {str(embed_error)}")
                 return
 
-            # Create a new HighscoresView with cached embeds to replace the existing view
-            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
+            # Create a new HighscoresView with cached embeds to replace the existing view (with loading state disabled)
+            new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=False)
 
             edited = False
             try:
