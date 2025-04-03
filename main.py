@@ -51,17 +51,18 @@ class HighscoresView(View):
 
     async def skills_button_callback(self, interaction):
         try:
-            # Acknowledge the interaction immediately to prevent timeout
-            await interaction.response.defer(ephemeral=True, thinking=True)
+            # Acknowledge the interaction IMMEDIATELY with a very fast response
+            # This is critical to prevent the "application did not respond" error
+            await interaction.response.defer(ephemeral=True)
             
-            # Show updated thinking message
-            await interaction.followup.send("Switching to Skills category... Please wait.", ephemeral=True)
-            
-            # Create a new view with skills as active category and loading state enabled
-            loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=True)
-            
-            # Update the message to show loading state first
             try:
+                # Now that we've acknowledged, show updated thinking message
+                await interaction.followup.send("Switching to Skills category... Please wait.", ephemeral=True)
+                
+                # Create a new view with skills as active category and loading state enabled
+                loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=True)
+                
+                # Update the message to show loading state
                 await interaction.message.edit(view=loading_view)
             except Exception as e:
                 print(f"Error setting loading state: {str(e)}")
@@ -119,31 +120,29 @@ class HighscoresView(View):
 
     async def bosses_button_callback(self, interaction):
         try:
-            # Acknowledge the interaction immediately to prevent timeout
-            await interaction.response.defer(ephemeral=True, thinking=True)
+            # Acknowledge the interaction IMMEDIATELY with a very fast response
+            # This is critical to prevent the "application did not respond" error
+            await interaction.response.defer(ephemeral=True)
             
             # Check if we already have the bosses overview embed cached
             bosses_overview_key = "bosses_overview"
             using_cached = bosses_overview_key in self.cached_embeds
             
-            # Show updated thinking message
-            if using_cached:
-                await interaction.followup.send("Switching to Bosses category... (using cached data)", ephemeral=True)
-            else:
-                await interaction.followup.send("Switching to Bosses category... Please wait while loading data.", ephemeral=True)
-            
-            # Create a new view with bosses as active category but in loading state
             try:
+                # Now that we've acknowledged, show updated thinking message
+                if using_cached:
+                    await interaction.followup.send("Switching to Bosses category... (using cached data)", ephemeral=True)
+                else:
+                    await interaction.followup.send("Switching to Bosses category... Please wait while loading data.", ephemeral=True)
+                
+                # Create a new view with bosses as active category but in loading state
                 loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=True)
                 
-                # Update the message to show loading state first
-                try:
-                    await interaction.message.edit(view=loading_view)
-                except Exception as e:
-                    print(f"Error setting loading state: {str(e)}")
+                # Update the message to show loading state
+                await interaction.message.edit(view=loading_view)
             except Exception as view_error:
                 print(f"Error creating bosses loading view: {str(view_error)}")
-                await interaction.edit_original_response(content=f"❌ Error creating bosses view: {str(view_error)}")
+                await interaction.followup.send(content=f"❌ Error creating bosses view: {str(view_error)}", ephemeral=True)
                 return
             
             # Get a generic bosses overview embed or create one
@@ -258,18 +257,20 @@ class SkillsDropdown(discord.ui.Select):
 
     async def callback(self, interaction):
         try:
-            # Acknowledge the interaction immediately to prevent timeout
-            await interaction.response.defer(ephemeral=True, thinking=True)
-            
-            # Show updated thinking message
-            await interaction.followup.send("Loading skill data... Please wait.", ephemeral=True)
-            
             selected_value = self.values[0]
             current_time = time.time()
             
-            # First set the loading state on the UI
-            loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=True)
+            # Acknowledge the interaction IMMEDIATELY with a very fast response
+            # This is critical to prevent the "application did not respond" error
+            await interaction.response.defer(ephemeral=True)
+            
+            # Now that we've acknowledged, we can take time to update the message
             try:
+                # Show updated thinking message
+                await interaction.followup.send("Loading skill data... Please wait.", ephemeral=True)
+                
+                # First set the loading state on the UI
+                loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="skills", is_loading=True)
                 await interaction.message.edit(view=loading_view)
             except Exception as e:
                 print(f"Error setting loading state: {str(e)}")
@@ -436,18 +437,20 @@ class BossesDropdown(discord.ui.Select):
 
     async def callback(self, interaction):
         try:
-            # Acknowledge the interaction immediately to prevent timeout
-            await interaction.response.defer(ephemeral=True, thinking=True)
-            
-            # Show updated thinking message
-            await interaction.followup.send("Loading boss data... Please wait.", ephemeral=True)
-            
             selected_value = self.values[0]
             current_time = time.time()
             
-            # First set the loading state on the UI
-            loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=True)
+            # Acknowledge the interaction IMMEDIATELY with a very fast response
+            # This is critical to prevent the "application did not respond" error
+            await interaction.response.defer(ephemeral=True)
+            
+            # Now that we've acknowledged, we can take time to update the message
             try:
+                # Show updated thinking message
+                await interaction.followup.send("Loading boss data... Please wait.", ephemeral=True)
+                
+                # Set the loading state on the UI
+                loading_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses", is_loading=True)
                 await interaction.message.edit(view=loading_view)
             except Exception as e:
                 print(f"Error setting loading state: {str(e)}")
