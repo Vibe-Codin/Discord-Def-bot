@@ -253,7 +253,7 @@ class SkillsDropdown(discord.ui.Select):
 
             # Acknowledge the interaction IMMEDIATELY with a very fast response
             # This is critical to prevent the "application did not respond" error
-            await interaction.response.defer(ephemeral=True)
+            await interaction.response.defer(thinking=False, ephemeral=True)
 
             # Now that we've acknowledged, we can take time to update the message
             try:
@@ -424,7 +424,7 @@ class BossesDropdown(discord.ui.Select):
 
             # Acknowledge the interaction IMMEDIATELY with a very fast response
             # This is critical to prevent the "application did not respond" error
-            await interaction.response.defer(ephemeral=True)
+            await interaction.response.defer(thinking=False, ephemeral=True)
 
             # Now that we've acknowledged, we can take time to update the message
             try:
