@@ -631,8 +631,7 @@ class HighscoresBot(discord.Client):
                 # If level is more than 2, exclude the player
                 if skills[skill_name]['level'] > 2:
                     if DEBUG:
-                        print(f"Player {player_name} EXCLUDED: {skill_name.capitalize()} level {skills[skill_name]['level']} > 2```
- > 2")
+                        print(f"Player {player_name} EXCLUDED: {skill_name.capitalize()} level {skills[skill_name]['level']} > 2")
                     # Cache the negative result
                     self.player_validation_cache[player_name] = [False, current_time]
                     return False
@@ -1547,43 +1546,62 @@ async def on_ready():
             @app_commands.checks.cooldown(1, 30.0, key=lambda i: i.guild_id)
             async def new_command(interaction: discord.Interaction):
                 try:
-                    await interaction.response.defer(thinking=True)
+                    # Respond immediately to prevent timeout
+                    await interaction.response.defer(thinking=True, ephemeral=True)
 
+                    # Get the channel where the command was used
                     channel = interaction.channel
-                    if channel:
-                        # Set a variable to track if we've responded yet
-                        response_sent = False
-                        try:
+                    if not channel:
+                        await interaction.followup.send("Couldn't access this channel. Try again in a text channel.", ephemeral=True)
+                        return
+
+                    # Immediately follow up to acknowledge the command
+                    await interaction.followup.send("Creating a new highscores embed...", ephemeral=True)
+
+                    try:
+                        # Start the background processing task immediately
+                        loading_message = await channel.send("Creating new highscores embed... please wait...")
+
+                        # Get embed from cache or create a new one
+                        if "total" in client.cached_embeds:
+                            embed = client.cached_embeds["total"]
+                            embed.timestamp = datetime.now()
+                            print("Using cached total embed for /new command")
+                        else:
+                            print("No cached total embed found, creating new one for /new command")
+                            embed = await client.update_highscores(force_refresh=False)
+
+                        if isinstance(embed, discord.Embed):
                             # Create a new view with cached embeds
-                            view = HighscoresView(client, client.cached_embeds)
-                            # Get embed from cache or create a new one
-                            if "total" in client.cached_embeds:
-                                embed = client.cached_embeds["total"]
-                                embed.timestamp = datetime.now()
-                            else:
-                                embed = await client.update_highscores(force_refresh=False)
-                            # Send to channel
-                            message = await channel.send(embed=embed, view=view)
-                            client.last_message = message
-                            await interaction.followup.send("New highscores embed created successfully!", ephemeral=True)
-                            response_sent = True
-                        except discord.errors.HTTPException as http_err:
-                            print(f"HTTP error in new command: {str(http_err)}")
-                            if not response_sent:
-                                await interaction.followup.send(f"Discord API error: {str(http_err)}", ephemeral=True)
-                        except Exception as e:
-                            print(f"Error in new_embed command: {str(e)}")
-                            if not response_sent:
-                                await interaction.followup.send(f"Error creating new embed: {str(e)}", ephemeral=True)
-                    else:
-                        await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+                            view = HighscoresView(client, client.cached_embeds, active_category="skills")
+                            
+                            # Edit the loading message
+                            try:
+                                await loading_message.edit(content=None, embed=embed, view=view)
+                                client.last_message = loading_message
+                            except discord.errors.HTTPException as http_err:
+                                print(f"HTTP error when editing message: {str(http_err)}")
+                                # If edit fails, send a new message
+                                new_message = await channel.send(embed=embed, view=view)
+                                client.last_message = new_message
+                                await loading_message.delete()
+                        else:
+                            # If we got an error string back
+                            error_message = "Error creating highscores embed"
+                            if isinstance(embed, str):
+                                error_message = embed
+                            await loading_message.edit(content=f"⚠️ {error_message}")
+                    except Exception as e:
+                        print(f"Error in /new command execution: {str(e)}")
+                        await channel.send(f"Error creating new highscores embed: {str(e)}")
                 except Exception as outer_e:
-                    print(f"Critical error in new command: {str(outer_e)}")
+                    error_message = str(outer_e)
+                    print(f"Critical error in /new command: {error_message}")
                     try:
                         if not interaction.response.is_done():
-                            await interaction.response.send_message(f"An error occurred: {str(outer_e)}", ephemeral=True)
+                            await interaction.response.send_message(f"An error occurred: {error_message}", ephemeral=True)
                         else:
-                            await interaction.followup.send(f"An error occurred: {str(outer_e)}", ephemeral=True)
+                            await interaction.followup.send(f"An error occurred: {error_message}", ephemeral=True)
                     except:
                         print("Could not respond to interaction after error")
 
