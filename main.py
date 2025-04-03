@@ -650,7 +650,7 @@ class HighscoresBot(discord.Client):
     async def on_ready(self):
         print(f'{self.user} has connected to Discord!')
 
-    # Cache for player validation results (name -> [is_valid, timestamp])
+    # Cache for player validation results (name ->> [is_valid, timestamp])
     player_validation_cache = {}
     # Cache expiry time in seconds (6 hours)
     CACHE_EXPIRY = 6 * 60 * 60
@@ -1355,20 +1355,20 @@ class HighscoresBot(discord.Client):
 
                             # Process results
                             for entry, validation_task in validation_tasks:
-                                is_valid = await validation_task
-                                if is_valid:
-                        player_name = entry['player']['displayName']
+                                    is_valid = await validation_task
+                                    if is_valid:
+                                        player_name = entry['player']['displayName']
 
-                                    if 'data' in entry and 'kills' in entry['data']:
-                                        kills = entry['data']['kills']
+                                        if 'data' in entry and 'kills' in entry['data']:
+                                            kills = entry['data']['kills']
 
-                                        # Only include if they have kills for this boss
-                                        if kills > 0:
-                                            boss_kcs.append({
-                                                'name': player_name,
-                                                'boss': display_name,
-                                                'kills': kills
-                                            })
+                                            # Only include if they have kills for this boss
+                                            if kills > 0:
+                                                boss_kcs.append({
+                                                    'name': player_name,
+                                                    'boss': display_name,
+                                                    'kills': kills
+                                                })
 
                             return boss_kcs
                         except Exception as e:
