@@ -1347,7 +1347,7 @@ class HighscoresBot(discord.Client):
             # Check if it's a specific skill or boss
             elif view_type in ['defence', 'hitpoints', 'prayer', 'cooking', 'woodcutting', 
                               'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 
-                              'mining', 'herblore, 'agility', 'thieving', 'slayer', 'farming', 
+                              'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 
                               'runecrafting', 'hunter', 'construction'] or view_type in [
                               'barrows_chests', 'bryophyta', 'callisto', 'chambers_of_xeric', 
                               'chambers_of_xeric_challenge_mode', 'chaos_elemental', 'chaos_fanatic', 
@@ -1540,6 +1540,11 @@ async def on_ready():
 
             # Only register the 'new' and 'refreshcache' commands
             print("Registering only /new and /refreshcache commands...")
+
+            # Remove any existing commands with the same names
+            for cmd in client.tree.get_commands():
+                if cmd.name in ["new", "cacherefresh"]:
+                    client.tree.remove_command(cmd.name)
 
             # Add commands explicitly before syncing
             @client.tree.command(name="new", description="Push a new highscores embed without refreshing cache")
