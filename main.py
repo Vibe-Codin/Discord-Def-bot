@@ -120,7 +120,7 @@ class HighscoresView(View):
 
             success = False
             error_message = None
-            
+
             try:
                 await interaction.message.edit(embed=embed, view=new_view)
                 success = True
@@ -135,7 +135,7 @@ class HighscoresView(View):
                 except Exception as e2:
                     error_message = str(e2)
                     print(f"Error sending new message: {error_message}")
-            
+
             if success:
                 if using_cached:
                     # Get cache age
@@ -262,7 +262,7 @@ class SkillsDropdown(discord.ui.Select):
 
     # Default timeout for API requests (in seconds)
     API_TIMEOUT = 15
-    
+
     # Additional error handling for dropdown callbacks
     async def safe_interaction_response(self, interaction, content, ephemeral=True):
         try:
@@ -315,7 +315,7 @@ class BossesDropdown(discord.ui.Select):
             discord.SelectOption(label="Vetion", value="vetion", description="Vetion boss highscores"),
             discord.SelectOption(label="Wintertodt", value="wintertodt", description="Wintertodt boss highscores"),
         ]
-        
+
         # Ensure we don't exceed 25 options (Discord limit)
         if len(options) > 25:
             print(f"Warning: Dropdown has {len(options)} options, limiting to 25")
@@ -631,7 +631,8 @@ class HighscoresBot(discord.Client):
                 # If level is more than 2, exclude the player
                 if skills[skill_name]['level'] > 2:
                     if DEBUG:
-                        print(f"Player {player_name} EXCLUDED: {skill_name.capitalize()} level {skills[skill_name]['level']} > 2")
+                        print(f"Player {player_name} EXCLUDED: {skill_name.capitalize()} level {skills[skill_name]['level']} > 2```
+ > 2")
                     # Cache the negative result
                     self.player_validation_cache[player_name] = [False, current_time]
                     return False
@@ -1347,7 +1348,7 @@ class HighscoresBot(discord.Client):
             # Check if it's a specific skill or boss
             elif view_type in ['defence', 'hitpoints', 'prayer', 'cooking', 'woodcutting', 
                               'fletching', 'fishing', 'firemaking', 'crafting', 'smithing', 
-                              'mining', 'herblore', 'agility', 'thieving', 'slayer', 'farming', 
+                              'mining', 'herblore, 'agility', 'thieving', 'slayer', 'farming', 
                               'runecrafting', 'hunter', 'construction'] or view_type in [
                               'barrows_chests', 'bryophyta', 'callisto', 'chambers_of_xeric', 
                               'chambers_of_xeric_challenge_mode', 'chaos_elemental', 'chaos_fanatic', 
@@ -1547,7 +1548,7 @@ async def on_ready():
             async def new_command(interaction: discord.Interaction):
                 try:
                     await interaction.response.defer(thinking=True)
-                    
+
                     channel = interaction.channel
                     if channel:
                         # Set a variable to track if we've responded yet
@@ -1590,46 +1591,58 @@ async def on_ready():
             @app_commands.checks.cooldown(1, 60.0, key=lambda i: i.guild_id)
             async def refresh_cache_command(interaction: discord.Interaction):
                 try:
+                    # Respond immediately to prevent timeout
                     await interaction.response.defer(thinking=True, ephemeral=True)
-                    
+
                     channel = interaction.channel
-                    if channel:
-                        # A variable to track if we've responded yet
-                        response_sent = False
-                        try:
-                            # Let user know it might take time
-                            await interaction.followup.send("Refreshing cache... This may take a moment.", ephemeral=True)
-                            
-                            # Force refresh the cache
-                            embed = await client.update_highscores(force_refresh=True)
-                            
-                            # Set timestamp
-                            if isinstance(embed, discord.Embed):
-                                embed.timestamp = datetime.now()
-                            elif isinstance(embed, str):
-                                # If we got an error string back
-                                await interaction.followup.send(f"Error refreshing cache: {embed}", ephemeral=True)
-                                return
-                                
-                            # Create view
-                            view = HighscoresView(client, client.cached_embeds)
-                            
-                            # Send to channel
-                            message = await channel.send(embed=embed, view=view)
-                            client.last_message = message
-                            
-                            await interaction.followup.send("Highscores cache refreshed and new embed created successfully!", ephemeral=True)
-                            response_sent = True
-                        except discord.errors.HTTPException as http_err:
-                            print(f"HTTP error in cacherefresh command: {str(http_err)}")
-                            if not response_sent:
-                                await interaction.followup.send(f"Discord API error: {str(http_err)}", ephemeral=True)
-                        except Exception as e:
-                            print(f"Error in refresh_cache command: {str(e)}")
-                            if not response_sent:
-                                await interaction.followup.send(f"Error refreshing cache: {str(e)}", ephemeral=True)
-                    else:
-                        await interaction.followup.send("Couldn't post to this channel. Try again in a text channel.", ephemeral=True)
+                    if not channel:
+                        await interaction.followup.send("Couldn't access this channel. Try again in a text channel.", ephemeral=True)
+                        return
+
+                    # Immediately follow up to acknowledge the command
+                    await interaction.followup.send("Starting cache refresh... I'll post the new embed when it's ready.", ephemeral=True)
+
+                    try:
+                        # Start the background processing task but don't wait for it
+                        async def background_refresh():
+                            try:
+                                # Create a loading message
+                                loading_message = await channel.send("Refreshing highscores data... please wait...")
+
+                                # Force refresh the cache
+                                embed = await client.update_highscores(force_refresh=True)
+
+                                # Set timestamp
+                                if isinstance(embed, discord.Embed):
+                                    embed.timestamp = datetime.now()
+
+                                    # Create view with buttons
+                                    view = HighscoresView(client, client.cached_embeds)
+
+                                    # Edit loading message with the new embed or send new message if edit fails
+                                    try:
+                                        await loading_message.edit(content=None, embed=embed, view=view)
+                                        client.last_message = loading_message
+                                    except Exception:
+                                        new_message = await channel.send(embed=embed, view=view)
+                                        client.last_message = new_message
+                                        await loading_message.delete()
+                                else:
+                                    # If we got an error string back
+                                    await loading_message.edit(content=f"Error refreshing cache: {embed}")
+                            except Exception as e:
+                                print(f"Error in background refresh: {str(e)}")
+                                try:
+                                    await channel.send(f"Error refreshing highscores: {str(e)}")
+                                except:
+                                    print(f"Could not send error message to channel")
+
+                        # Start the background task without awaiting it
+                        asyncio.create_task(background_refresh())
+
+                    except Exception as e:
+                        print(f"Error in refresh_cache command: {str(e)}")
+                        await interaction.followup.send(f"Error starting refresh: {str(e)}", ephemeral=True)
                 except Exception as outer_e:
                     print(f"Critical error in cacherefresh command: {str(outer_e)}")
                     try:
