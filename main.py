@@ -104,19 +104,24 @@ class HighscoresView(View):
                 return
 
             # Get a generic bosses overview embed or create one
-            if using_cached:
-                embed = self.cached_embeds[bosses_overview_key]
-                # Update the timestamp to show it's current
-                embed.timestamp = datetime.now()
-                print("Using cached bosses overview data")
-            else:
-                print("Need to create new bosses overview embed")
-                embed = await self.bot.create_bosses_overview_embed()
-                if isinstance(embed, discord.Embed):
+            try:
+                if using_cached:
+                    embed = self.cached_embeds[bosses_overview_key]
+                    # Update the timestamp to show it's current
                     embed.timestamp = datetime.now()
-                    self.cached_embeds[bosses_overview_key] = embed
-                    # Store cache time for this embed
-                    self.bot.cache_times[bosses_overview_key] = time.time()
+                    print("Using cached bosses overview data")
+                else:
+                    print("Need to create new bosses overview embed")
+                    embed = await self.bot.create_bosses_overview_embed()
+                    if isinstance(embed, discord.Embed):
+                        embed.timestamp = datetime.now()
+                        self.cached_embeds[bosses_overview_key] = embed
+                        # Store cache time for this embed
+                        self.bot.cache_times[bosses_overview_key] = time.time()
+            except Exception as embed_error:
+                print(f"Error creating bosses overview embed: {str(embed_error)}")
+                await interaction.edit_original_response(content=f"❌ Error creating bosses overview: {str(embed_error)}")
+                return
 
             success = False
             error_message = None
@@ -259,6 +264,10 @@ class SkillsDropdown(discord.ui.Select):
             print(f"Interaction expired for {self.values[0] if hasattr(self, 'values') and self.values else 'unknown'}")
         except Exception as e:
             print(f"Error in skills dropdown callback: {str(e)}")
+            try:
+                await interaction.edit_original_response(content=f"❌ An error occurred: {str(e)}")
+            except:
+                print("Could not update error message")
 
     # Default timeout for API requests (in seconds)
     API_TIMEOUT = 15
@@ -339,25 +348,30 @@ class BossesDropdown(discord.ui.Select):
             if not hasattr(self.bot, 'cache_times'):
                 self.bot.cache_times = {}
 
-            if cached_entry and selected_value in self.bot.cache_times:
-                cache_age = current_time - self.bot.cache_times[selected_value]
-                embed = cached_entry
-                print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
-                # Update timestamp to show it's current
-                embed.timestamp = datetime.now()
-            elif selected_value == "bosses_overview":
-                embed = await self.bot.create_bosses_overview_embed()
-                if isinstance(embed, discord.Embed):
-                    self.bot.cache_times[selected_value] = current_time
+            try:
+                if cached_entry and selected_value in self.bot.cache_times:
+                    cache_age = current_time - self.bot.cache_times[selected_value]
+                    embed = cached_entry
+                    print(f"Using cached embed for {selected_value} (age: {cache_age/60:.1f} minutes)")
+                    # Update timestamp to show it's current
                     embed.timestamp = datetime.now()
-                    self.cached_embeds["bosses_overview"] = embed
-            else:
-                # For specific boss
-                embed = await self.bot.create_single_category_embed(selected_value)
-                if isinstance(embed, discord.Embed):
-                    self.bot.cache_times[selected_value] = current_time
-                    embed.timestamp = datetime.now()
-                    self.cached_embeds[selected_value] = embed
+                elif selected_value == "bosses_overview":
+                    embed = await self.bot.create_bosses_overview_embed()
+                    if isinstance(embed, discord.Embed):
+                        self.bot.cache_times[selected_value] = current_time
+                        embed.timestamp = datetime.now()
+                        self.cached_embeds["bosses_overview"] = embed
+                else:
+                    # For specific boss
+                    embed = await self.bot.create_single_category_embed(selected_value)
+                    if isinstance(embed, discord.Embed):
+                        self.bot.cache_times[selected_value] = current_time
+                        embed.timestamp = datetime.now()
+                        self.cached_embeds[selected_value] = embed
+            except Exception as embed_error:
+                print(f"Error creating embed for {selected_value}: {str(embed_error)}")
+                await interaction.edit_original_response(content=f"❌ Error creating {selected_value} highscores: {str(embed_error)}")
+                return
 
             # Create a new HighscoresView with cached embeds to replace the existing view
             new_view = HighscoresView(self.bot, self.cached_embeds, active_category="bosses")
@@ -395,9 +409,9 @@ class BossesDropdown(discord.ui.Select):
         except Exception as e:
             print(f"Error in bosses dropdown callback: {str(e)}")
             try:
-                await interaction.followup.send(f"Error updating highscores: {str(e)}", ephemeral=True)
+                await interaction.edit_original_response(content=f"❌ An error occurred: {str(e)}")
             except:
-                print(f"Could not send error followup")
+                print(f"Could not update error message")
 
 # Discord bot token
 import os
